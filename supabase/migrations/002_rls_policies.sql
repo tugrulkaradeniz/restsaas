@@ -56,10 +56,10 @@ declare
 begin
   foreach t in array array[
     'floor_plans','tables',
-    'menu_categories','menu_items','menu_item_allergens',
-    'orders','order_items','payments',
-    'ingredients','recipes','suppliers','ingredient_suppliers',
-    'expenses','customers','loyalty_transactions',
+    'menu_categories','menu_items',
+    'orders','payments',
+    'ingredients','suppliers',
+    'expenses','customers',
     'reservations','shifts','reviews','campaigns'
   ]
   loop
@@ -134,5 +134,13 @@ create policy "ingredient_suppliers_via_ingredient" on ingredient_suppliers
     exists (
       select 1 from ingredients i
       where i.id = ingredient_id and i.tenant_id = get_tenant_id()
+    )
+  );
+
+create policy "loyalty_transactions_via_customer" on loyalty_transactions
+  for all using (
+    exists (
+      select 1 from customers c
+      where c.id = customer_id and c.tenant_id = get_tenant_id()
     )
   );
