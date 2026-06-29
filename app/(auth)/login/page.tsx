@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 
@@ -66,6 +67,13 @@ export default function LoginPage() {
             {loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
           </button>
         </form>
+
+        <p className="text-center text-sm text-gray-500 mt-6">
+          Hesabınız yok mu?{' '}
+          <Link href="/register" className="text-orange-500 hover:underline font-medium">
+            Ücretsiz Kayıt Ol
+          </Link>
+        </p>
       </div>
     </div>
   )
