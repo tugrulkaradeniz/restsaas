@@ -24,33 +24,52 @@ export async function middleware(request: NextRequest) {
   )
 
   const { data: { user } } = await supabase.auth.getUser()
-
   const { pathname } = request.nextUrl
+  const role = user?.app_metadata?.role as string | undefined
+
+  // Subdomain → tenant slug header'a yaz
   const host = request.headers.get('host') || ''
   const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN || 'localhost:3000'
-
-  // Subdomain → tenant_id çıkar ve header'a yaz
   const subdomain = host.replace(`.${appDomain}`, '')
   const isTenantRequest = subdomain !== host && subdomain !== 'www'
   if (isTenantRequest) {
     supabaseResponse.headers.set('x-tenant-slug', subdomain)
   }
 
-  // Public paths — auth gerektirmez
   const publicPaths = ['/login', '/register', '/forgot-password', '/menu', '/order', '/rezervasyon']
   const isPublicPath = publicPaths.some((p) => pathname.startsWith(p))
   const isApiWebhook = pathname.startsWith('/api/webhooks')
 
+  // Giriş yapılmamış → login'e yönlendir
   if (!user && !isPublicPath && !isApiWebhook) {
-    const loginUrl = request.nextUrl.clone()
-    loginUrl.pathname = '/login'
-    return NextResponse.redirect(loginUrl)
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
   }
 
-  if (user && (pathname === '/login' || pathname === '/register')) {
-    const dashboardUrl = request.nextUrl.clone()
-    dashboardUrl.pathname = '/dashboard'
-    return NextResponse.redirect(dashboardUrl)
+  if (user) {
+    const isSuperAdmin = role === 'super_admin'
+
+    // Login/register sayfasındaysa role'e göre yönlendir
+    if (pathname === '/login' || pathname === '/register') {
+      const url = request.nextUrl.clone()
+      url.pathname = isSuperAdmin ? '/super-admin' : '/dashboard'
+      return NextResponse.redirect(url)
+    }
+
+    // Super admin değil ama /super-admin'e girmeye çalışıyor
+    if (!isSuperAdmin && pathname.startsWith('/super-admin')) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/dashboard'
+      return NextResponse.redirect(url)
+    }
+
+    // Super admin ama restoran paneline girmeye çalışıyor
+    if (isSuperAdmin && pathname.startsWith('/dashboard')) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/super-admin'
+      return NextResponse.redirect(url)
+    }
   }
 
   return supabaseResponse
