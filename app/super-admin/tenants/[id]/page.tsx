@@ -31,6 +31,7 @@ export default async function TenantDetailPage({ params }: { params: { id: strin
         <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
           <h2 className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Restoran Bilgileri</h2>
           <InfoRow label="ID"           value={tenant.id} mono />
+          <InfoRow label="Restoran Kodu" value={tenant.code ?? '—'} mono />
           <InfoRow label="Plan"         value={tenant.plan} />
           <InfoRow label="Sadakat"      value={tenant.loyalty_enabled ? 'Aktif' : 'Pasif'} />
           <InfoRow label="Kayıt Tarihi" value={new Date(tenant.created_at).toLocaleDateString('tr-TR')} />

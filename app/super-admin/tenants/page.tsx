@@ -7,7 +7,7 @@ export default async function TenantsPage() {
 
   const { data: tenants } = await supabase
     .from('tenants')
-    .select('*, users(count)')
+    .select('id, name, slug, code, plan, trial_ends_at, created_at, users(count)')
     .order('created_at', { ascending: false })
 
   return (
@@ -22,7 +22,7 @@ export default async function TenantsPage() {
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr className="text-left text-xs text-gray-500">
               <th className="px-5 py-3 font-medium">Restoran</th>
-              <th className="px-5 py-3 font-medium">Slug</th>
+              <th className="px-5 py-3 font-medium">Kod</th>
               <th className="px-5 py-3 font-medium">Plan</th>
               <th className="px-5 py-3 font-medium">Kullanıcı</th>
               <th className="px-5 py-3 font-medium">Trial Bitiş</th>
@@ -41,7 +41,7 @@ export default async function TenantsPage() {
                     <Building2 size={15} className="text-gray-400 shrink-0" />
                     {t.name}
                   </td>
-                  <td className="px-5 py-3 text-gray-500">{t.slug}</td>
+                  <td className="px-5 py-3 font-mono text-sm font-semibold text-gray-800 tracking-widest">{t.code ?? '—'}</td>
                   <td className="px-5 py-3"><PlanPill plan={t.plan} /></td>
                   <td className="px-5 py-3 text-gray-700">{userCount}</td>
                   <td className="px-5 py-3">

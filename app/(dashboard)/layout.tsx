@@ -14,7 +14,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .eq('id', user.id)
     .single()
 
-  if (!profile) redirect('/login')
+  if (!profile) redirect('/api/auth/signout')
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
