@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { cn, formatCurrency } from '@/lib/utils'
 import type { MenuCategory, MenuItem, MenuItemAllergen } from '@/types/database'
-import { Plus, Pencil, Trash2, CheckCircle, XCircle, FlaskConical } from 'lucide-react'
+import { Plus, Pencil, Trash2, CheckCircle, XCircle, FlaskConical, ImagePlus, X } from 'lucide-react'
 import { RecipeModal } from './RecipeModal'
 
 type FullMenuItem = MenuItem & {
@@ -23,19 +24,24 @@ const ALLERGENS = ['Gluten', 'Süt', 'Yumurta', 'Fındık', 'Susam', 'Balık', '
 
 const blankItem = {
   name: '', price: '', cost: '', description_internal: '', description_public: '',
-  is_available: true, is_visible_selfservis: true, category_id: '', allergens: [] as string[],
+  is_available: true, is_visible_selfservis: true, category_id: '',
+  allergens: [] as string[], image_url: null as string | null,
 }
 
 export function MenuManager({ tenantId, initialCategories, initialItems }: Props) {
   const [categories, setCategories] = useState<MenuCategory[]>(initialCategories)
-  const [items, setItems] = useState<FullMenuItem[]>(initialItems)
+  const [items, setItems]           = useState<FullMenuItem[]>(initialItems)
   const [activeCatId, setActiveCatId] = useState(categories[0]?.id ?? '')
   const [editingItem, setEditingItem] = useState<Partial<typeof blankItem> | null>(null)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [showItemForm, setShowItemForm] = useState(false)
-  const [showCatForm, setShowCatForm] = useState(false)
-  const [newCatName, setNewCatName] = useState('')
-  const [recipeItem, setRecipeItem] = useState<FullMenuItem | null>(null)
+  const [showCatForm, setShowCatForm]   = useState(false)
+  const [newCatName, setNewCatName]     = useState('')
+  const [recipeItem, setRecipeItem]     = useState<FullMenuItem | null>(null)
+  const [imageFile, setImageFile]       = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [uploading, setUploading]       = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
 
   const filteredItems = items.filter((i) => i.category_id === activeCatId)
@@ -43,6 +49,8 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
   function openNewItem() {
     setEditingItem({ ...blankItem, category_id: activeCatId })
     setEditingItemId(null)
+    setImageFile(null)
+    setImagePreview(null)
     setShowItemForm(true)
   }
 
@@ -57,9 +65,39 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
       is_visible_selfservis: item.is_visible_selfservis,
       category_id: item.category_id,
       allergens: item.allergens.map((a) => a.allergen),
+      image_url: item.image_url ?? null,
     })
     setEditingItemId(item.id)
+    setImageFile(null)
+    setImagePreview(item.image_url ?? null)
     setShowItemForm(true)
+  }
+
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) { toast.error('Resim en fazla 5 MB olabilir'); return }
+    setImageFile(file)
+    setImagePreview(URL.createObjectURL(file))
+  }
+
+  function removeImage() {
+    setImageFile(null)
+    setImagePreview(null)
+    setEditingItem((p) => p ? { ...p, image_url: null } : p)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  async function uploadImage(itemId: string): Promise<string | null> {
+    if (!imageFile) return editingItem?.image_url ?? null
+    setUploading(true)
+    const ext  = imageFile.name.split('.').pop()
+    const path = `${tenantId}/${itemId}.${ext}`
+    const { error } = await supabase.storage.from('menu-images').upload(path, imageFile, { upsert: true })
+    setUploading(false)
+    if (error) { toast.error('Resim yüklenemedi: ' + error.message); return null }
+    const { data } = supabase.storage.from('menu-images').getPublicUrl(path)
+    return data.publicUrl
   }
 
   async function saveItem() {
@@ -67,7 +105,8 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
       toast.error('İsim, fiyat ve kategori zorunlu')
       return
     }
-    const payload = {
+
+    const basePayload = {
       tenant_id: tenantId,
       name: editingItem.name,
       price: parseFloat(editingItem.price),
@@ -80,30 +119,48 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
     }
 
     if (editingItemId) {
+      // Önce kaydet, sonra resim yükle (itemId gerekli)
+      const imageUrl = await uploadImage(editingItemId)
+      const payload  = { ...basePayload, image_url: imageUrl }
       const { error } = await supabase.from('menu_items').update(payload).eq('id', editingItemId)
       if (error) { toast.error(error.message); return }
-      // allergen sync
       await supabase.from('menu_item_allergens').delete().eq('menu_item_id', editingItemId)
       if (editingItem.allergens?.length) {
         await supabase.from('menu_item_allergens').insert(
           editingItem.allergens.map((a) => ({ menu_item_id: editingItemId, allergen: a }))
         )
       }
-      setItems((prev) => prev.map((i) => i.id === editingItemId ? { ...i, ...payload, allergens: (editingItem.allergens ?? []).map((a) => ({ id: '', menu_item_id: editingItemId!, allergen: a })) } as FullMenuItem : i))
+      setItems((prev) => prev.map((i) =>
+        i.id === editingItemId
+          ? { ...i, ...payload, allergens: (editingItem.allergens ?? []).map((a) => ({ id: '', menu_item_id: editingItemId!, allergen: a })) } as FullMenuItem
+          : i
+      ))
       toast.success('Ürün güncellendi')
     } else {
-      const { data, error } = await supabase.from('menu_items').insert(payload).select('*, allergens:menu_item_allergens(*), category:menu_categories(name)').single()
+      // Önce ürünü ekle, id al, sonra resim yükle
+      const { data, error } = await supabase.from('menu_items')
+        .insert({ ...basePayload, image_url: null })
+        .select('*, allergens:menu_item_allergens(*), category:menu_categories(name)')
+        .single()
       if (error || !data) { toast.error(error?.message); return }
+
+      const imageUrl = await uploadImage(data.id)
+      if (imageUrl) {
+        await supabase.from('menu_items').update({ image_url: imageUrl }).eq('id', data.id)
+      }
+
       if (editingItem.allergens?.length) {
         await supabase.from('menu_item_allergens').insert(
           editingItem.allergens.map((a) => ({ menu_item_id: data.id, allergen: a }))
         )
       }
-      setItems((prev) => [...prev, data as FullMenuItem])
+      setItems((prev) => [...prev, { ...data, image_url: imageUrl } as FullMenuItem])
       toast.success('Ürün eklendi')
     }
     setShowItemForm(false)
     setEditingItem(null)
+    setImageFile(null)
+    setImagePreview(null)
   }
 
   async function deleteItem(id: string) {
@@ -122,7 +179,9 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
   async function addCategory() {
     if (!newCatName.trim()) return
     const maxOrder = Math.max(0, ...categories.map((c) => c.sort_order))
-    const { data, error } = await supabase.from('menu_categories').insert({ tenant_id: tenantId, name: newCatName.trim(), sort_order: maxOrder + 1 }).select().single()
+    const { data, error } = await supabase.from('menu_categories')
+      .insert({ tenant_id: tenantId, name: newCatName.trim(), sort_order: maxOrder + 1 })
+      .select().single()
     if (error) { toast.error(error.message); return }
     setCategories((prev) => [...prev, data])
     setNewCatName('')
@@ -155,26 +214,18 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
         </div>
         {showCatForm && (
           <div className="flex gap-1 mb-2">
-            <input
-              autoFocus
-              value={newCatName}
-              onChange={(e) => setNewCatName(e.target.value)}
+            <input autoFocus value={newCatName} onChange={(e) => setNewCatName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addCategory()}
-              placeholder="Kategori adı"
-              className="flex-1 border rounded-lg px-2 py-1 text-xs"
-            />
+              placeholder="Kategori adı" className="flex-1 border rounded-lg px-2 py-1 text-xs" />
             <button onClick={addCategory} className="bg-orange-500 text-white px-2 rounded-lg text-xs">Ekle</button>
           </div>
         )}
         {categories.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => setActiveCatId(cat.id)}
+          <button key={cat.id} onClick={() => setActiveCatId(cat.id)}
             className={cn(
               'w-full text-left text-sm px-3 py-2 rounded-lg transition-colors',
               activeCatId === cat.id ? 'bg-orange-500 text-white' : 'text-gray-700 hover:bg-gray-100'
-            )}
-          >
+            )}>
             {cat.name}
             <span className={cn('ml-1 text-xs', activeCatId === cat.id ? 'text-orange-100' : 'text-gray-400')}>
               ({items.filter((i) => i.category_id === cat.id).length})
@@ -189,11 +240,8 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
           <h2 className="font-semibold text-gray-900">
             {categories.find((c) => c.id === activeCatId)?.name ?? 'Kategori'}
           </h2>
-          <button
-            onClick={openNewItem}
-            disabled={!activeCatId}
-            className="flex items-center gap-2 bg-orange-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-600 disabled:opacity-50"
-          >
+          <button onClick={openNewItem} disabled={!activeCatId}
+            className="flex items-center gap-2 bg-orange-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-600 disabled:opacity-50">
             <Plus size={15} /> Ürün Ekle
           </button>
         </div>
@@ -201,6 +249,13 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
         <div className="space-y-2">
           {filteredItems.map((item) => (
             <div key={item.id} className="bg-white rounded-xl border px-4 py-3 flex items-center gap-4">
+              {/* Küçük resim */}
+              <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
+                {item.image_url
+                  ? <Image src={item.image_url} alt={item.name} width={48} height={48} className="w-full h-full object-cover" />
+                  : <span className="text-gray-300 text-xl">🍽️</span>
+                }
+              </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <p className="font-medium text-gray-900">{item.name}</p>
@@ -267,7 +322,7 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
         />
       )}
 
-      {/* Item form modal */}
+      {/* Ürün form modal */}
       {showItemForm && editingItem && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
@@ -276,6 +331,28 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
             </h2>
 
             <div className="space-y-3">
+              {/* Resim yükleme */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ürün Resmi</label>
+                {imagePreview ? (
+                  <div className="relative w-full h-40 rounded-xl overflow-hidden bg-gray-100">
+                    <Image src={imagePreview} alt="Önizleme" fill className="object-cover" />
+                    <button onClick={removeImage}
+                      className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => fileInputRef.current?.click()}
+                    className="w-full h-32 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-orange-300 hover:text-orange-400 transition-colors">
+                    <ImagePlus size={24} />
+                    <span className="text-sm">Resim seç (JPG, PNG, WebP — max 5 MB)</span>
+                  </button>
+                )}
+                <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden" onChange={onFileChange} />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Ürün Adı *</label>
                 <input value={editingItem.name ?? ''} onChange={(e) => setEditingItem((p) => ({ ...p!, name: e.target.value }))}
@@ -320,17 +397,13 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
                 <label className="block text-sm font-medium text-gray-700 mb-2">Alerjenler</label>
                 <div className="flex flex-wrap gap-2">
                   {ALLERGENS.map((a) => (
-                    <button
-                      key={a}
-                      type="button"
-                      onClick={() => toggleAllergen(a)}
+                    <button key={a} type="button" onClick={() => toggleAllergen(a)}
                       className={cn(
                         'px-3 py-1 rounded-full text-xs border transition-colors',
                         editingItem.allergens?.includes(a)
                           ? 'bg-yellow-400 border-yellow-400 text-white'
                           : 'bg-white border-gray-200 text-gray-600 hover:border-yellow-300'
-                      )}
-                    >
+                      )}>
                       {a}
                     </button>
                   ))}
@@ -350,10 +423,12 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
             </div>
 
             <div className="flex gap-2 mt-6">
-              <button onClick={saveItem} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2.5 rounded-lg font-medium text-sm">
-                {editingItemId ? 'Güncelle' : 'Ekle'}
+              <button onClick={saveItem} disabled={uploading}
+                className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white py-2.5 rounded-lg font-medium text-sm">
+                {uploading ? 'Resim yükleniyor...' : editingItemId ? 'Güncelle' : 'Ekle'}
               </button>
-              <button onClick={() => { setShowItemForm(false); setEditingItem(null) }} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-lg font-medium text-sm">
+              <button onClick={() => { setShowItemForm(false); setEditingItem(null); setImageFile(null); setImagePreview(null) }}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-lg font-medium text-sm">
                 İptal
               </button>
             </div>
