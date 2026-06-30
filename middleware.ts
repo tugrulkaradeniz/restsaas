@@ -39,9 +39,10 @@ export async function middleware(request: NextRequest) {
   const publicPaths = ['/login', '/register', '/forgot-password', '/menu', '/order', '/rezervasyon']
   const isPublicPath = publicPaths.some((p) => pathname.startsWith(p))
   const isApiWebhook = pathname.startsWith('/api/webhooks')
+  const isApiRoute = pathname.startsWith('/api/')
 
   // Giriş yapılmamış → login'e yönlendir
-  if (!user && !isPublicPath && !isApiWebhook) {
+  if (!user && !isPublicPath && !isApiWebhook && !isApiRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
