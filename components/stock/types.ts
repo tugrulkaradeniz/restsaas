@@ -7,6 +7,9 @@ export interface StockEntryItem {
   ingredient_id: string
   quantity: number
   unit_cost: number
+  kdv_rate: number
+  kdv_included: boolean
+  kdv_amount: number
   total: number
   ingredient?: { name: string; unit: string } | null
 }
@@ -28,7 +31,6 @@ export interface StockEntry {
   invoice_date: string
   due_date: string | null
   subtotal: number
-  kdv_rate: number
   kdv_amount: number
   total_amount: number
   paid_amount: number

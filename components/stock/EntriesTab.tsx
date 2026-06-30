@@ -110,7 +110,7 @@ export function EntriesTab({ entries, setEntries, ingredients, suppliers }: Prop
                     <p className="font-medium text-gray-800">{formatCurrency(entry.subtotal)}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-gray-500 text-xs">KDV %{entry.kdv_rate}</p>
+                    <p className="text-gray-500 text-xs">KDV</p>
                     <p className="font-medium text-gray-800">{formatCurrency(entry.kdv_amount)}</p>
                   </div>
                   <div className="text-right flex items-center justify-end gap-2">
@@ -142,6 +142,7 @@ export function EntriesTab({ entries, setEntries, ingredients, suppliers }: Prop
                             <th className="text-left pb-1">Malzeme</th>
                             <th className="text-right pb-1">Miktar</th>
                             <th className="text-right pb-1">Birim Fiyat</th>
+                            <th className="text-right pb-1">KDV</th>
                             <th className="text-right pb-1">Toplam</th>
                           </tr>
                         </thead>
@@ -150,7 +151,13 @@ export function EntriesTab({ entries, setEntries, ingredients, suppliers }: Prop
                             <tr key={item.id}>
                               <td className="text-gray-700">{item.ingredient?.name ?? '?'}</td>
                               <td className="text-right text-gray-600">{item.quantity} {item.ingredient?.unit}</td>
-                              <td className="text-right text-gray-600">{formatCurrency(item.unit_cost)}</td>
+                              <td className="text-right text-gray-600">
+                                {formatCurrency(item.unit_cost)}
+                                {item.kdv_included && <span className="ml-1 text-xs text-gray-400">(dahil)</span>}
+                              </td>
+                              <td className="text-right text-gray-500 text-xs">
+                                %{item.kdv_rate} / {formatCurrency(item.kdv_amount)}
+                              </td>
                               <td className="text-right font-medium text-gray-800">{formatCurrency(item.total)}</td>
                             </tr>
                           ))}
