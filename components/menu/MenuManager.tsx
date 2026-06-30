@@ -14,8 +14,9 @@ type FullMenuItem = MenuItem & {
 }
 
 interface Props {
+  tenantId:          string
   initialCategories: MenuCategory[]
-  initialItems: FullMenuItem[]
+  initialItems:      FullMenuItem[]
 }
 
 const ALLERGENS = ['Gluten', 'Süt', 'Yumurta', 'Fındık', 'Susam', 'Balık', 'Kabuklu deniz ürünleri', 'Soya', 'Kereviz', 'Hardal']
@@ -25,7 +26,7 @@ const blankItem = {
   is_available: true, is_visible_selfservis: true, category_id: '', allergens: [] as string[],
 }
 
-export function MenuManager({ initialCategories, initialItems }: Props) {
+export function MenuManager({ tenantId, initialCategories, initialItems }: Props) {
   const [categories, setCategories] = useState<MenuCategory[]>(initialCategories)
   const [items, setItems] = useState<FullMenuItem[]>(initialItems)
   const [activeCatId, setActiveCatId] = useState(categories[0]?.id ?? '')
@@ -67,6 +68,7 @@ export function MenuManager({ initialCategories, initialItems }: Props) {
       return
     }
     const payload = {
+      tenant_id: tenantId,
       name: editingItem.name,
       price: parseFloat(editingItem.price),
       cost: editingItem.cost ? parseFloat(editingItem.cost) : null,
@@ -120,7 +122,7 @@ export function MenuManager({ initialCategories, initialItems }: Props) {
   async function addCategory() {
     if (!newCatName.trim()) return
     const maxOrder = Math.max(0, ...categories.map((c) => c.sort_order))
-    const { data, error } = await supabase.from('menu_categories').insert({ name: newCatName.trim(), sort_order: maxOrder + 1 }).select().single()
+    const { data, error } = await supabase.from('menu_categories').insert({ tenant_id: tenantId, name: newCatName.trim(), sort_order: maxOrder + 1 }).select().single()
     if (error) { toast.error(error.message); return }
     setCategories((prev) => [...prev, data])
     setNewCatName('')

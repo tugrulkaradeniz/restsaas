@@ -1,8 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 import { MenuManager } from '@/components/menu/MenuManager'
 
 export default async function MenuPage() {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const tenantId = user.app_metadata?.tenant_id as string
+  if (!tenantId) redirect('/api/auth/signout')
 
   const [{ data: categories }, { data: items }] = await Promise.all([
     supabase.from('menu_categories').select('*').order('sort_order'),
@@ -15,7 +21,11 @@ export default async function MenuPage() {
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Menü Yönetimi</h1>
-      <MenuManager initialCategories={categories ?? []} initialItems={items ?? []} />
+      <MenuManager
+        tenantId={tenantId}
+        initialCategories={categories ?? []}
+        initialItems={items ?? []}
+      />
     </div>
   )
 }
