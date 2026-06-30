@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/layout/Sidebar'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -8,13 +8,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
+  // Service client kullanıyoruz: RLS'yi bypass eder, JWT içerikleri değil identity önemli
+  const service = createServiceClient()
+  const { data: profile, error: profileError } = await service
     .from('users')
     .select('*, tenants(*)')
     .eq('id', user.id)
     .single()
 
-  if (!profile) redirect('/api/auth/signout')
+  if (!profile) {
+    console.error('[Dashboard] Profil bulunamadı:', user.id, profileError?.message)
+    redirect('/api/auth/signout')
+  }
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
