@@ -32,21 +32,24 @@ function LoginForm() {
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    const supabase = createClient()
 
-    // Restoran kodunu doğrula
-    const { data: tenant } = await supabase
-      .from('tenants')
-      .select('id')
-      .eq('code', code.trim().toUpperCase())
-      .single()
+    // Restoran kodunu sunucu tarafında doğrula (RLS bypass)
+    const codeRes = await fetch('/api/auth/validate-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    })
 
-    if (!tenant) {
-      toast.error('Restoran kodu bulunamadı.')
+    if (!codeRes.ok) {
+      const { error } = await codeRes.json()
+      toast.error(error ?? 'Restoran kodu bulunamadı.')
       setLoading(false)
       return
     }
 
+    const { tenantId } = await codeRes.json()
+
+    const supabase = createClient()
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
@@ -56,8 +59,7 @@ function LoginForm() {
     }
 
     // Kullanıcı bu restorana ait mi?
-    const userTenantId = data.user?.app_metadata?.tenant_id
-    if (userTenantId !== tenant.id) {
+    if (data.user?.app_metadata?.tenant_id !== tenantId) {
       await supabase.auth.signOut()
       toast.error('Bu restorana erişim yetkiniz yok.')
       setLoading(false)
