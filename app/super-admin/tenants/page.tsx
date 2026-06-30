@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { Building2 } from 'lucide-react'
 
 export default async function TenantsPage() {
-  const supabase = await createServiceClient()
+  const supabase = createServiceClient()
 
   const { data: tenants } = await supabase
     .from('tenants')

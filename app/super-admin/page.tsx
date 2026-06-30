@@ -3,7 +3,7 @@ import { Building2, Users, TrendingUp, Star } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function SuperAdminOverviewPage() {
-  const supabase = await createServiceClient()
+  const supabase = createServiceClient()
 
   const [
     { count: totalTenants },

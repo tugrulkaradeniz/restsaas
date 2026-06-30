@@ -2,7 +2,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 
 export default async function UsersPage() {
-  const supabase = await createServiceClient()
+  const supabase = createServiceClient()
 
   const { data: users } = await supabase
     .from('users')

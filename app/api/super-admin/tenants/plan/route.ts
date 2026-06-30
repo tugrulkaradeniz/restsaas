@@ -14,7 +14,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Geçersiz istek.' }, { status: 400 })
   }
 
-  const service = await createServiceClient()
+  const service = createServiceClient()
   const { error } = await service.from('tenants').update({ plan }).eq('id', tenantId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

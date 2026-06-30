@@ -5,7 +5,7 @@ export async function POST(req: NextRequest) {
   const { code } = await req.json()
   if (!code) return NextResponse.json({ error: 'Kod gerekli.' }, { status: 400 })
 
-  const supabase = await createServiceClient()
+  const supabase = createServiceClient()
   const { data } = await supabase
     .from('tenants')
     .select('id, name')

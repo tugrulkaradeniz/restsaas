@@ -5,7 +5,7 @@ import { ArrowLeft } from 'lucide-react'
 import { PlanChangeForm } from './PlanChangeForm'
 
 export default async function TenantDetailPage({ params }: { params: { id: string } }) {
-  const supabase = await createServiceClient()
+  const supabase = createServiceClient()
 
   const [{ data: tenant }, { data: users }] = await Promise.all([
     supabase.from('tenants').select('*').eq('id', params.id).single(),
