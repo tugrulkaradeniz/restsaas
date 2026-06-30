@@ -22,10 +22,18 @@ interface Props {
 
 const ALLERGENS = ['Gluten', 'Süt', 'Yumurta', 'Fındık', 'Susam', 'Balık', 'Kabuklu deniz ürünleri', 'Soya', 'Kereviz', 'Hardal']
 
+const KDV_RATES = [0, 1, 8, 10, 18, 20]
+
+function kdvLabel(rate: number, included: boolean) {
+  if (rate === 0) return 'KDV yok'
+  return `%${rate} KDV ${included ? 'dahil' : 'hariç'}`
+}
+
 const blankItem = {
   name: '', price: '', cost: '', description_internal: '', description_public: '',
   is_available: true, is_visible_selfservis: true, category_id: '',
   allergens: [] as string[], image_url: null as string | null,
+  kdv_rate: 10, kdv_included: true,
 }
 
 export function MenuManager({ tenantId, initialCategories, initialItems }: Props) {
@@ -66,6 +74,8 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
       category_id: item.category_id,
       allergens: item.allergens.map((a) => a.allergen),
       image_url: item.image_url ?? null,
+      kdv_rate: item.kdv_rate ?? 10,
+      kdv_included: item.kdv_included ?? true,
     })
     setEditingItemId(item.id)
     setImageFile(null)
@@ -116,6 +126,8 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
       description_public: editingItem.description_public || null,
       is_available: editingItem.is_available,
       is_visible_selfservis: editingItem.is_visible_selfservis,
+      kdv_rate: editingItem.kdv_rate ?? 10,
+      kdv_included: editingItem.kdv_included ?? true,
     }
 
     if (editingItemId) {
@@ -281,6 +293,7 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
               </div>
               <div className="text-right">
                 <p className="font-semibold text-orange-600">{formatCurrency(item.price)}</p>
+                <p className="text-xs text-gray-400">{kdvLabel(item.kdv_rate ?? 10, item.kdv_included ?? true)}</p>
                 {item.cost && (
                   <p className="text-xs text-gray-400">Maliyet: {formatCurrency(item.cost)}</p>
                 )}
@@ -369,6 +382,35 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
                   <label className="block text-sm font-medium text-gray-700 mb-1">Maliyet (₺)</label>
                   <input type="number" step="0.01" value={editingItem.cost ?? ''} onChange={(e) => setEditingItem((p) => ({ ...p!, cost: e.target.value }))}
                     className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="0.00" />
+                </div>
+              </div>
+
+              {/* KDV */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">KDV Oranı</label>
+                  <select value={editingItem.kdv_rate ?? 10}
+                    onChange={(e) => setEditingItem((p) => ({ ...p!, kdv_rate: Number(e.target.value) }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm">
+                    {KDV_RATES.map((r) => <option key={r} value={r}>%{r}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">KDV Durumu</label>
+                  <div className="flex rounded-lg border overflow-hidden h-[38px]">
+                    <button type="button"
+                      onClick={() => setEditingItem((p) => ({ ...p!, kdv_included: true }))}
+                      className={cn('flex-1 text-sm font-medium transition-colors',
+                        editingItem.kdv_included ? 'bg-orange-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-50')}>
+                      Dahil
+                    </button>
+                    <button type="button"
+                      onClick={() => setEditingItem((p) => ({ ...p!, kdv_included: false }))}
+                      className={cn('flex-1 text-sm font-medium transition-colors border-l',
+                        !editingItem.kdv_included ? 'bg-orange-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-50')}>
+                      Hariç
+                    </button>
+                  </div>
                 </div>
               </div>
 

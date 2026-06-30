@@ -92,6 +92,8 @@ export interface MenuItem {
   image_url: string | null
   description_internal: string | null
   description_public: string | null
+  kdv_rate: number
+  kdv_included: boolean
   is_available: boolean
   is_visible_selfservis: boolean
   created_at: string
