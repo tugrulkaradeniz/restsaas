@@ -4,7 +4,7 @@ import type { UserRole } from '@/types/database'
 
 const ALLOWED_ROLES: UserRole[] = ['manager', 'cashier', 'waiter', 'kitchen']
 
-async function getCallerAndTenant(req: NextRequest) {
+async function getCallerAndTenant() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   return {
@@ -16,7 +16,7 @@ async function getCallerAndTenant(req: NextRequest) {
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { user, tenantId, callerRole } = await getCallerAndTenant(req)
+  const { user, tenantId, callerRole } = await getCallerAndTenant()
 
   if (!user) return NextResponse.json({ error: 'Yetki yok' }, { status: 401 })
   if (!tenantId || callerRole !== 'owner') {
@@ -51,7 +51,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { user, tenantId, callerRole } = await getCallerAndTenant(req)
+  const { user, tenantId, callerRole } = await getCallerAndTenant()
 
   if (!user) return NextResponse.json({ error: 'Yetki yok' }, { status: 401 })
   if (!tenantId || callerRole !== 'owner') {
