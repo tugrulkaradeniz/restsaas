@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { User, UserRole } from '@/types/database'
@@ -33,7 +32,6 @@ interface Props {
 }
 
 export function StaffManager({ initialStaff, currentUserId }: Props) {
-  const router = useRouter()
   const [staff, setStaff]           = useState<User[]>(initialStaff)
   const [showForm, setShowForm]     = useState(false)
   const [form, setForm]             = useState({ ...blank })
@@ -56,10 +54,10 @@ export function StaffManager({ initialStaff, currentUserId }: Props) {
     if (!res.ok) {
       toast.error(data.error ?? 'Hata oluştu')
     } else {
+      setStaff((prev) => [...prev, data.user])
       toast.success('Personel eklendi')
       setShowForm(false)
       setForm({ ...blank })
-      router.refresh()
     }
     setSaving(false)
   }

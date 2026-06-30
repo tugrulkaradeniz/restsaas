@@ -38,5 +38,15 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-  return NextResponse.json({ ok: true, userId: data.user.id })
+  const { data: userRow, error: upsertError } = await service.from('users').upsert({
+    id: data.user.id,
+    tenant_id: tenantId,
+    email,
+    role,
+    full_name,
+  }, { onConflict: 'id' }).select().single()
+
+  if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 400 })
+
+  return NextResponse.json({ ok: true, user: userRow })
 }
