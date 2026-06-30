@@ -5,7 +5,8 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { cn, formatCurrency } from '@/lib/utils'
 import type { MenuCategory, MenuItem, MenuItemAllergen } from '@/types/database'
-import { Plus, Pencil, Trash2, CheckCircle, XCircle } from 'lucide-react'
+import { Plus, Pencil, Trash2, CheckCircle, XCircle, FlaskConical } from 'lucide-react'
+import { RecipeModal } from './RecipeModal'
 
 type FullMenuItem = MenuItem & {
   allergens: MenuItemAllergen[]
@@ -33,6 +34,7 @@ export function MenuManager({ initialCategories, initialItems }: Props) {
   const [showItemForm, setShowItemForm] = useState(false)
   const [showCatForm, setShowCatForm] = useState(false)
   const [newCatName, setNewCatName] = useState('')
+  const [recipeItem, setRecipeItem] = useState<FullMenuItem | null>(null)
   const supabase = createClient()
 
   const filteredItems = items.filter((i) => i.category_id === activeCatId)
@@ -230,6 +232,9 @@ export function MenuManager({ initialCategories, initialItems }: Props) {
                 <button onClick={() => toggleAvailable(item)} className="p-2 hover:bg-gray-100 rounded-lg" title={item.is_available ? 'Tükendi yap' : 'Mevcut yap'}>
                   {item.is_available ? <CheckCircle size={16} className="text-green-500" /> : <XCircle size={16} className="text-red-400" />}
                 </button>
+                <button onClick={() => setRecipeItem(item)} className="p-2 hover:bg-orange-50 rounded-lg" title="Reçete">
+                  <FlaskConical size={16} className="text-orange-400" />
+                </button>
                 <button onClick={() => openEditItem(item)} className="p-2 hover:bg-gray-100 rounded-lg">
                   <Pencil size={16} className="text-gray-400" />
                 </button>
@@ -246,6 +251,19 @@ export function MenuManager({ initialCategories, initialItems }: Props) {
           )}
         </div>
       </div>
+
+      {recipeItem && (
+        <RecipeModal
+          menuItemId={recipeItem.id}
+          menuItemName={recipeItem.name}
+          currentCost={recipeItem.cost ?? null}
+          onClose={() => setRecipeItem(null)}
+          onCostUpdated={(id, cost) => {
+            setItems((prev) => prev.map((i) => i.id === id ? { ...i, cost } : i))
+            setRecipeItem(null)
+          }}
+        />
+      )}
 
       {/* Item form modal */}
       {showItemForm && editingItem && (
