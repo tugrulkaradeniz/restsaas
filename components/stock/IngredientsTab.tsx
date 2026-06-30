@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { cn, formatCurrency } from '@/lib/utils'
 import type { Ingredient } from '@/types/database'
-import { Plus, Pencil, Trash2, X, Check, AlertTriangle } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, AlertTriangle } from 'lucide-react'
 
 const UNITS = ['kg', 'g', 'litre', 'ml', 'adet', 'demet', 'kutu', 'şişe', 'paket', 'porsiyon']
 
