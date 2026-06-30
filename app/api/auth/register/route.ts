@@ -1,6 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 
+function toAscii(str: string) {
+  return str
+    .replace(/ğ/gi, 'g').replace(/ü/gi, 'u').replace(/ş/gi, 's')
+    .replace(/ı/gi, 'i').replace(/İ/g, 'i').replace(/ö/gi, 'o').replace(/ç/gi, 'c')
+}
+
+async function generateCode(name: string, supabase: Awaited<ReturnType<typeof createServiceClient>>): Promise<string> {
+  const base = toAscii(name)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 8)
+    .padEnd(8, '0')
+
+  // Benzersiz olana kadar dene
+  for (let i = 0; i < 10; i++) {
+    const candidate = i === 0 ? base : (base.slice(0, 6) + String(i).padStart(2, '0'))
+    const { data } = await supabase.from('tenants').select('id').eq('code', candidate).single()
+    if (!data) return candidate
+  }
+
+  // Son çare: random suffix
+  return base.slice(0, 5) + Math.random().toString(36).slice(2, 5).toUpperCase()
+}
+
 export async function POST(req: NextRequest) {
   const { email, password, fullName, restaurantName } = await req.json()
 
@@ -10,37 +34,28 @@ export async function POST(req: NextRequest) {
 
   const supabase = await createServiceClient()
 
-  // Slug oluştur: "Lezzet Durağı" → "lezzet-duragi"
-  const slug = restaurantName
+  const slug = toAscii(restaurantName)
     .toLowerCase()
-    .replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's')
-    .replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ç/g, 'c')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
 
-  // Slug benzersiz mi?
-  const { data: existing } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('slug', slug)
-    .single()
-
+  const { data: existing } = await supabase.from('tenants').select('id').eq('slug', slug).single()
   if (existing) {
     return NextResponse.json({ error: 'Bu restoran adı zaten kullanılıyor.' }, { status: 409 })
   }
 
-  // Tenant oluştur
+  const code = await generateCode(restaurantName, supabase)
+
   const { data: tenant, error: tenantError } = await supabase
     .from('tenants')
-    .insert({ name: restaurantName, slug })
-    .select('id')
+    .insert({ name: restaurantName, slug, code })
+    .select('id, code')
     .single()
 
   if (tenantError || !tenant) {
     return NextResponse.json({ error: 'Restoran oluşturulamadı.' }, { status: 500 })
   }
 
-  // Auth kullanıcısı oluştur (trigger public.users'a ekler)
   const { error: userError } = await supabase.auth.admin.createUser({
     email,
     password,
@@ -50,10 +65,9 @@ export async function POST(req: NextRequest) {
   })
 
   if (userError) {
-    // Tenant'ı geri sil
     await supabase.from('tenants').delete().eq('id', tenant.id)
     return NextResponse.json({ error: userError.message }, { status: 400 })
   }
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, code: tenant.code })
 }

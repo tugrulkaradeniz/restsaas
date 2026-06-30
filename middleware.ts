@@ -36,7 +36,7 @@ export async function middleware(request: NextRequest) {
     supabaseResponse.headers.set('x-tenant-slug', subdomain)
   }
 
-  const publicPaths = ['/login', '/register', '/forgot-password', '/menu', '/order', '/rezervasyon']
+  const publicPaths = ['/login', '/register', '/admin/login', '/forgot-password', '/menu', '/order', '/rezervasyon']
   const isPublicPath = publicPaths.some((p) => pathname.startsWith(p))
   const isApiWebhook = pathname.startsWith('/api/webhooks')
   const isApiRoute = pathname.startsWith('/api/')
@@ -52,7 +52,7 @@ export async function middleware(request: NextRequest) {
     const isSuperAdmin = role === 'super_admin'
 
     // Login/register sayfasındaysa role'e göre yönlendir
-    if (pathname === '/login' || pathname === '/register') {
+    if (pathname === '/login' || pathname === '/register' || pathname === '/admin/login') {
       const url = request.nextUrl.clone()
       url.pathname = isSuperAdmin ? '/super-admin' : '/dashboard'
       return NextResponse.redirect(url)
