@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Restoran oluşturulamadı.' }, { status: 500 })
   }
 
-  const { error: userError } = await supabase.auth.admin.createUser({
+  const { data: newUser, error: userError } = await supabase.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
@@ -64,10 +64,19 @@ export async function POST(req: NextRequest) {
     user_metadata: { full_name: fullName },
   })
 
-  if (userError) {
+  if (userError || !newUser?.user) {
     await supabase.from('tenants').delete().eq('id', tenant.id)
-    return NextResponse.json({ error: userError.message }, { status: 400 })
+    return NextResponse.json({ error: userError?.message ?? 'Kullanıcı oluşturulamadı.' }, { status: 400 })
   }
+
+  // Trigger'a güvenmek yerine public.users satırını garantile
+  await supabase.from('users').upsert({
+    id: newUser.user.id,
+    tenant_id: tenant.id,
+    email,
+    role: 'owner',
+    full_name: fullName,
+  }, { onConflict: 'id' })
 
   return NextResponse.json({ ok: true, code: tenant.code })
 }
