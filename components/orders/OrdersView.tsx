@@ -9,7 +9,10 @@ import type {
   Order, Table, MenuCategory, MenuItem, OrderItem,
   OrderStatus, FloorPlan, FloorPlanTable, TableStatus,
 } from '@/types/database'
-import { Plus, Minus, ShoppingCart, Pencil, X, CreditCard, Banknote, Smartphone, LayoutGrid, Printer } from 'lucide-react'
+import { Plus, Minus, ShoppingCart, Pencil, X, CreditCard, Banknote, Smartphone, LayoutGrid, Printer, BellRing, Check } from 'lucide-react'
+import type { WaiterCall } from '@/types/database'
+
+type PendingCall = WaiterCall & { tableName: string }
 import { printReceipt } from '@/lib/print'
 
 type FullOrder = Order & {
@@ -78,6 +81,7 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null)
   const [panelMode, setPanelMode] = useState<PanelMode>('none')
   const [activeCategoryId, setActiveCategoryId] = useState(categories[0]?.id ?? '')
+  const [pendingCalls, setPendingCalls] = useState<PendingCall[]>([])
   const [cart, setCart] = useState<CartItem[]>([])
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -106,23 +110,64 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
     ? orders.find(o => o.table_id === selectedTableId && ACTIVE_STATUSES.includes(o.status))
     : undefined
 
-  // Realtime subscription
+  // Realtime subscriptions
   useEffect(() => {
-    const channel = supabase
+    const ordersChannel = supabase
       .channel('orders-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
         if (payload.eventType === 'UPDATE') {
           const u = payload.new as Order
-          setOrders(prev => prev.map(o => o.id === u.id ? { ...o, status: u.status, total_amount: u.total_amount } : o))
+          setOrders(prev => {
+            const existing = prev.find(o => o.id === u.id)
+            // Yemek hazır bildirimi
+            if (existing && u.status === 'ready' && existing.status !== 'ready') {
+              const tableName = existing.table?.name ?? 'Paket sipariş'
+              toast.success(`🍽️ ${tableName} hazır! Servis edilebilir.`, {
+                duration: 15_000,
+                style: { background: '#16a34a', color: '#fff' },
+              })
+            }
+            return prev.map(o => o.id === u.id ? { ...o, status: u.status, total_amount: u.total_amount } : o)
+          })
         }
         if (payload.eventType === 'DELETE') {
           setOrders(prev => prev.filter(o => o.id !== (payload.old as Order).id))
         }
       })
       .subscribe()
-    return () => { supabase.removeChannel(channel) }
+
+    const callsChannel = supabase
+      .channel('waiter-calls-realtime')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'waiter_calls', filter: `tenant_id=eq.${tenantId}` },
+        (payload) => {
+          const call = payload.new as WaiterCall
+          const tbl  = tables.find(t => t.id === call.table_id)
+          const tableName = tbl?.name ?? 'Bilinmeyen masa'
+          const pending: PendingCall = { ...call, tableName }
+          setPendingCalls(prev => [...prev, pending])
+          toast(`🔔 ${tableName} garson çağırıyor!`, {
+            duration: 60_000,
+            action: {
+              label: 'Gidiyorum',
+              onClick: () => answerCall(call.id),
+            },
+          })
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(ordersChannel)
+      supabase.removeChannel(callsChannel)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  async function answerCall(callId: string) {
+    await supabase.from('waiter_calls').update({ status: 'answered' }).eq('id', callId)
+    setPendingCalls(prev => prev.filter(c => c.id !== callId))
+  }
 
   function handleTableClick(tableId: string) {
     setSelectedTableId(tableId)
@@ -241,7 +286,26 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
   ))
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Garson çağrıları banner */}
+      {pendingCalls.length > 0 && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center gap-3 shrink-0">
+          <BellRing size={16} className="text-amber-500 animate-bounce shrink-0" />
+          <div className="flex-1 flex flex-wrap gap-2">
+            {pendingCalls.map(call => (
+              <span key={call.id} className="flex items-center gap-1.5 bg-amber-100 border border-amber-300 text-amber-800 text-xs px-2.5 py-1 rounded-full font-medium">
+                🔔 {call.tableName} çağırıyor
+                <button onClick={() => answerCall(call.id)} className="hover:text-green-700 ml-0.5">
+                  <Check size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+          <span className="text-xs text-amber-600 shrink-0">{pendingCalls.length} bekleyen</span>
+        </div>
+      )}
+
+      <div className="flex flex-1 overflow-hidden">
       {/* ===== Sol: Floor plan ===== */}
       <div className="flex flex-col bg-white border-r" style={{ minWidth: 0, flex: '0 0 58%' }}>
         {/* Alan sekmeleri */}
@@ -694,6 +758,7 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
             )}
           </div>
         )}
+      </div>
       </div>
     </div>
   )

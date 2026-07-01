@@ -27,6 +27,16 @@ export interface Tenant {
   kitchen_printer_model: string | null
   kitchen_printer_ip: string | null
   address: string | null
+  logo_url: string | null
+  created_at: string
+}
+
+export interface WaiterCall {
+  id: string
+  tenant_id: string
+  table_id: string
+  status: 'pending' | 'answered'
+  note: string | null
   created_at: string
 }
 

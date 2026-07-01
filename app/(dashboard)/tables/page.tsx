@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { FloorPlanEditor } from '@/components/tables/FloorPlanEditor'
+import { QrCodesButton } from '@/components/tables/QrCodesButton'
 
 export default async function TablesPage() {
   const supabase = await createClient()
@@ -20,7 +21,10 @@ export default async function TablesPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Masa Planı</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Masa Planı</h1>
+        <QrCodesButton tables={tables ?? []} />
+      </div>
       <FloorPlanEditor
         tenantId={tenantId}
         initialFloorPlans={floorPlans ?? []}

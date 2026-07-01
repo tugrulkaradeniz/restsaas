@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/server'
+import { CallWaiterButton } from '@/components/menu/CallWaiterButton'
 import type { MenuCategory, MenuItem } from '@/types/database'
 
 type FullCategory = MenuCategory & { items: MenuItem[] }
@@ -11,7 +12,6 @@ interface Props {
 export default async function QrMenuPage({ params }: Props) {
   const service = createServiceClient()
 
-  // Tokendan masayı bul
   const { data: table } = await service
     .from('tables')
     .select('id, name, tenant_id')
@@ -27,7 +27,7 @@ export default async function QrMenuPage({ params }: Props) {
       .eq('tenant_id', table.tenant_id)
       .eq('is_active', true)
       .order('sort_order'),
-    service.from('tenants').select('name, address').eq('id', table.tenant_id).single(),
+    service.from('tenants').select('name, address, logo_url').eq('id', table.tenant_id).single(),
   ])
 
   const cats = (categories ?? []) as FullCategory[]
@@ -41,7 +41,19 @@ export default async function QrMenuPage({ params }: Props) {
       {/* Header */}
       <div className="bg-white border-b sticky top-0 z-10 shadow-sm">
         <div className="max-w-lg mx-auto px-4 py-3">
-          <h1 className="text-lg font-bold text-gray-900 text-center">{tenant?.name ?? 'Menü'}</h1>
+          {tenant?.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={tenant.logo_url}
+              alt={tenant.name ?? 'Logo'}
+              className="h-12 mx-auto object-contain mb-1"
+            />
+          ) : (
+            <h1 className="text-lg font-bold text-gray-900 text-center">{tenant?.name ?? 'Menü'}</h1>
+          )}
+          {tenant?.logo_url && (
+            <p className="text-sm font-semibold text-gray-800 text-center">{tenant.name}</p>
+          )}
           {tenant?.address && (
             <p className="text-xs text-gray-400 text-center mt-0.5">{tenant.address}</p>
           )}
@@ -53,23 +65,25 @@ export default async function QrMenuPage({ params }: Props) {
         </div>
 
         {/* Category tabs */}
-        <div className="overflow-x-auto border-t">
-          <div className="flex gap-0 max-w-lg mx-auto">
-            {activeCats.map(c => (
-              <a
-                key={c.id}
-                href={`#cat-${c.id}`}
-                className="shrink-0 px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-orange-600 whitespace-nowrap border-b-2 border-transparent hover:border-orange-500 transition-colors"
-              >
-                {c.name}
-              </a>
-            ))}
+        {activeCats.length > 1 && (
+          <div className="overflow-x-auto border-t">
+            <div className="flex gap-0 max-w-lg mx-auto">
+              {activeCats.map(c => (
+                <a
+                  key={c.id}
+                  href={`#cat-${c.id}`}
+                  className="shrink-0 px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-orange-600 whitespace-nowrap border-b-2 border-transparent hover:border-orange-500 transition-colors"
+                >
+                  {c.name}
+                </a>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Menu */}
-      <div className="max-w-lg mx-auto px-4 py-4 space-y-8 pb-20">
+      {/* Menu items */}
+      <div className="max-w-lg mx-auto px-4 py-4 space-y-8 pb-32">
         {activeCats.map(cat => (
           <section key={cat.id} id={`cat-${cat.id}`}>
             <h2 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2">
@@ -78,7 +92,7 @@ export default async function QrMenuPage({ params }: Props) {
             </h2>
             <div className="space-y-2">
               {cat.items.map(item => (
-                <div key={item.id} className="bg-white rounded-xl border p-4 flex gap-3">
+                <div key={item.id} className="bg-white rounded-xl border p-4 flex gap-3 active:scale-[0.99] transition-transform">
                   {item.image_url && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -89,7 +103,7 @@ export default async function QrMenuPage({ params }: Props) {
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="font-semibold text-gray-900 text-sm">{item.name}</p>
+                      <p className="font-semibold text-gray-900 text-sm leading-tight">{item.name}</p>
                       <p className="text-orange-600 font-bold text-sm shrink-0">
                         {new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2 }).format(item.price)} ₺
                       </p>
@@ -97,13 +111,11 @@ export default async function QrMenuPage({ params }: Props) {
                     {item.description_public && (
                       <p className="text-xs text-gray-400 mt-1 leading-relaxed">{item.description_public}</p>
                     )}
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {item.calories && (
-                        <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-                          {item.calories} kcal
-                        </span>
-                      )}
-                    </div>
+                    {item.calories && (
+                      <span className="inline-block mt-2 text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                        {item.calories} kcal
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -118,9 +130,12 @@ export default async function QrMenuPage({ params }: Props) {
         )}
       </div>
 
+      {/* Floating waiter call button */}
+      <CallWaiterButton tableId={table.id} tableName={table.name} />
+
       {/* Footer */}
       <div className="fixed bottom-0 inset-x-0 bg-white border-t py-2 text-center">
-        <p className="text-xs text-gray-400">Sipariş için lütfen garson çağırın</p>
+        <p className="text-xs text-gray-400">Sipariş için garson çağırabilir veya lütfen personelimize bildirebilirsiniz</p>
       </div>
     </div>
   )

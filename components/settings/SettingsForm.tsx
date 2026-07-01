@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import { Upload, X, Loader2 } from 'lucide-react'
 import type { Tenant } from '@/types/database'
 
 interface Props {
@@ -21,8 +22,44 @@ export function SettingsForm({ tenant }: Props) {
     kitchen_printer_model: tenant?.kitchen_printer_model ?? '',
     kitchen_printer_ip: tenant?.kitchen_printer_ip ?? '',
   })
+  const [logoUrl, setLogoUrl] = useState<string | null>(tenant?.logo_url ?? null)
+  const [logoUploading, setLogoUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [saving, setSaving] = useState(false)
   const supabase = createClient()
+
+  async function uploadLogo(file: File) {
+    if (!tenant) return
+    setLogoUploading(true)
+    try {
+      const ext  = file.name.split('.').pop()
+      const path = `${tenant.id}/logo.${ext}`
+      const { error: upErr } = await supabase.storage
+        .from('logos')
+        .upload(path, file, { upsert: true, contentType: file.type })
+      if (upErr) throw upErr
+
+      const { data: { publicUrl } } = supabase.storage.from('logos').getPublicUrl(path)
+      const urlWithBust = `${publicUrl}?t=${Date.now()}`
+
+      const { error: dbErr } = await supabase.from('tenants').update({ logo_url: publicUrl }).eq('id', tenant.id)
+      if (dbErr) throw dbErr
+
+      setLogoUrl(urlWithBust)
+      toast.success('Logo yüklendi')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Logo yüklenemedi')
+    } finally {
+      setLogoUploading(false)
+    }
+  }
+
+  async function removeLogo() {
+    if (!tenant) return
+    await supabase.from('tenants').update({ logo_url: null }).eq('id', tenant.id)
+    setLogoUrl(null)
+    toast.success('Logo kaldırıldı')
+  }
 
   async function save() {
     if (!tenant) return
@@ -50,6 +87,53 @@ export function SettingsForm({ tenant }: Props) {
       {/* Genel */}
       <section className="bg-white rounded-xl border p-5 space-y-4">
         <h2 className="font-semibold text-gray-900">Genel Bilgiler</h2>
+
+        {/* Logo */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            İşletme Logosu <span className="text-gray-400 font-normal">(QR menüde görünür)</span>
+          </label>
+          <div className="flex items-center gap-4">
+            {logoUrl ? (
+              <div className="relative group">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={logoUrl} alt="Logo" className="h-16 w-auto object-contain border rounded-lg p-1 bg-gray-50" />
+                <button
+                  onClick={removeLogo}
+                  className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ) : (
+              <div className="w-16 h-16 border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center bg-gray-50">
+                <Upload size={18} className="text-gray-300" />
+              </div>
+            )}
+            <div className="space-y-1">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) uploadLogo(f)
+                }}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={logoUploading}
+                className="flex items-center gap-2 text-sm px-3 py-1.5 border rounded-lg hover:bg-gray-50 disabled:opacity-50 text-gray-700"
+              >
+                {logoUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                {logoUploading ? 'Yükleniyor...' : 'Logo Yükle'}
+              </button>
+              <p className="text-xs text-gray-400">PNG, JPG, SVG — maks. 2 MB</p>
+            </div>
+          </div>
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">İşletme Adı</label>
           <input
