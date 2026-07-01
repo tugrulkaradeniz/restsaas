@@ -24,6 +24,9 @@ export interface Tenant {
   loyalty_redeem_rate: number
   printer_model: string | null
   printer_ip: string | null
+  kitchen_printer_model: string | null
+  kitchen_printer_ip: string | null
+  address: string | null
   created_at: string
 }
 
