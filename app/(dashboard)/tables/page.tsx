@@ -1,8 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 import { FloorPlanEditor } from '@/components/tables/FloorPlanEditor'
 
 export default async function TablesPage() {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+  const tenantId = user.app_metadata?.tenant_id as string
 
   const [{ data: floorPlans }, { data: tables }, { data: reservations }] = await Promise.all([
     supabase.from('floor_plans').select('*').order('name'),
@@ -16,10 +20,9 @@ export default async function TablesPage() {
 
   return (
     <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Masa Planı</h1>
-      </div>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">Masa Planı</h1>
       <FloorPlanEditor
+        tenantId={tenantId}
         initialFloorPlans={floorPlans ?? []}
         tables={tables ?? []}
         todayReservations={reservations ?? []}
