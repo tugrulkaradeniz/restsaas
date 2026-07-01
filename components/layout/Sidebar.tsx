@@ -39,9 +39,11 @@ const navItems: NavItem[] = [
 interface Props {
   role: UserRole
   tenantName: string
+  userId: string
+  tenantId: string
 }
 
-export function Sidebar({ role, tenantName }: Props) {
+export function Sidebar({ role, tenantName, userId, tenantId }: Props) {
   const pathname = usePathname()
   const router = useRouter()
 
@@ -81,7 +83,7 @@ export function Sidebar({ role, tenantName }: Props) {
       </nav>
 
       <div className="border-t border-gray-700 pt-2">
-        <PresenceTimer />
+        <PresenceTimer userId={userId} tenantId={tenantId} />
         <div className="px-2 pb-3">
           <button
             onClick={handleLogout}

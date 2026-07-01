@@ -12,16 +12,26 @@ export default async function StaffPage() {
   if (!tenantId) redirect('/dashboard')
 
   const service = createServiceClient()
-  const { data: staff } = await service
-    .from('users')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .order('created_at')
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+
+  const [{ data: staff }, { data: sessions }] = await Promise.all([
+    service.from('users').select('*').eq('tenant_id', tenantId).order('created_at'),
+    service
+      .from('staff_sessions')
+      .select('user_id, active_seconds, away_seconds, away_count, last_sync, session_end')
+      .eq('tenant_id', tenantId)
+      .gte('created_at', todayStart.toISOString()),
+  ])
 
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Personel Yönetimi</h1>
-      <StaffManager initialStaff={staff ?? []} currentUserId={user.id} />
+      <StaffManager
+        initialStaff={staff ?? []}
+        currentUserId={user.id}
+        todaySessions={sessions ?? []}
+      />
     </div>
   )
 }

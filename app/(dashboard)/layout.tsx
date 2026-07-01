@@ -23,7 +23,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
-      <Sidebar role={profile.role} tenantName={profile.tenants?.name ?? ''} />
+      <Sidebar
+        role={profile.role}
+        tenantName={profile.tenants?.name ?? ''}
+        userId={user.id}
+        tenantId={user.app_metadata?.tenant_id as string ?? ''}
+      />
       <main className="flex-1 overflow-auto">
         {children}
       </main>

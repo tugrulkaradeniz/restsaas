@@ -4,7 +4,16 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { User, UserRole } from '@/types/database'
-import { Plus, Trash2, Pencil, X, Check, Users } from 'lucide-react'
+import { Plus, Trash2, Pencil, X, Check, Users, Monitor, Coffee } from 'lucide-react'
+
+interface SessionRow {
+  user_id: string
+  active_seconds: number
+  away_seconds: number
+  away_count: number
+  last_sync: string | null
+  session_end: string | null
+}
 
 const ROLE_LABELS: Record<string, string> = {
   owner:   'Sahip',
@@ -29,15 +38,51 @@ const blank = { full_name: '', email: '', password: '', role: 'waiter' as UserRo
 interface Props {
   initialStaff: User[]
   currentUserId: string
+  todaySessions: SessionRow[]
 }
 
-export function StaffManager({ initialStaff, currentUserId }: Props) {
-  const [staff, setStaff]           = useState<User[]>(initialStaff)
-  const [showForm, setShowForm]     = useState(false)
-  const [form, setForm]             = useState({ ...blank })
-  const [saving, setSaving]         = useState(false)
-  const [editingId, setEditingId]   = useState<string | null>(null)
+function hms(s: number) {
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  if (h > 0) return `${h}s ${m}dk`
+  return `${m}dk`
+}
+
+function relativeTime(iso: string | null) {
+  if (!iso) return '—'
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (diff < 2)  return 'az önce'
+  if (diff < 60) return `${diff} dk önce`
+  return `${Math.floor(diff / 60)}s önce`
+}
+
+export function StaffManager({ initialStaff, currentUserId, todaySessions }: Props) {
+  const [staff, setStaff]             = useState<User[]>(initialStaff)
+  const [showForm, setShowForm]       = useState(false)
+  const [form, setForm]               = useState({ ...blank })
+  const [saving, setSaving]           = useState(false)
+  const [editingId, setEditingId]     = useState<string | null>(null)
   const [editingRole, setEditingRole] = useState<UserRole>('waiter')
+  const [activeTab, setActiveTab]     = useState<'list' | 'activity'>('list')
+
+  // Aggregate sessions per user
+  const activityByUser = todaySessions.reduce<Record<string, {
+    active: number; away: number; awayCount: number; lastSync: string | null; online: boolean
+  }>>((acc, s) => {
+    if (!acc[s.user_id]) acc[s.user_id] = { active: 0, away: 0, awayCount: 0, lastSync: null, online: false }
+    acc[s.user_id].active    += s.active_seconds
+    acc[s.user_id].away      += s.away_seconds
+    acc[s.user_id].awayCount += s.away_count
+    if (!s.last_sync || (s.last_sync > (acc[s.user_id].lastSync ?? ''))) {
+      acc[s.user_id].lastSync = s.last_sync
+    }
+    // Online = open session (no session_end) with recent sync < 90s
+    if (!s.session_end && s.last_sync) {
+      const syncAge = (Date.now() - new Date(s.last_sync).getTime()) / 1000
+      if (syncAge < 90) acc[s.user_id].online = true
+    }
+    return acc
+  }, {})
 
   async function addStaff() {
     if (!form.full_name || !form.email || !form.password) {
@@ -93,16 +138,94 @@ export function StaffManager({ initialStaff, currentUserId }: Props) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <span className="text-sm text-gray-500 flex items-center gap-1.5">
-          <Users size={15} /> {staff.length} personel
-        </span>
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 bg-orange-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-600"
-        >
-          <Plus size={15} /> Personel Ekle
-        </button>
+        {/* Tabs */}
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+          {([['list', 'Personel Listesi'], ['activity', 'Bugünkü Aktivite']] as const).map(([key, label]) => (
+            <button key={key} onClick={() => setActiveTab(key)}
+              className={cn('px-4 py-1.5 rounded-md text-sm font-medium transition-colors',
+                activeTab === key ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              )}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {activeTab === 'list' && (
+          <button onClick={() => setShowForm(true)}
+            className="flex items-center gap-2 bg-orange-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-600">
+            <Plus size={15} /> Personel Ekle
+          </button>
+        )}
       </div>
+
+      {/* Activity tab */}
+      {activeTab === 'activity' && (
+        <div className="bg-white rounded-xl border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b text-xs">
+              <tr>
+                <th className="text-left px-4 py-3 font-medium text-gray-500">Personel</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500 flex items-center gap-1"><Monitor size={12} /> Ekranda</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500">Uzakta</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500">Uzaklaşma</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500">Son Görülme</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500">Durum</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {staff.filter(m => m.role !== 'super_admin').map(member => {
+                const a = activityByUser[member.id]
+                return (
+                  <tr key={member.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-gray-900">{member.full_name}</p>
+                      <p className="text-xs text-gray-400">{ROLE_LABELS[member.role] ?? member.role}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      {a ? (
+                        <span className="font-mono text-gray-900 font-medium">{hms(a.active)}</span>
+                      ) : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {a ? (
+                        <span className="font-mono text-gray-500">{hms(a.away)}</span>
+                      ) : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {a ? (
+                        <span className="flex items-center gap-1 text-gray-500">
+                          <Coffee size={12} /> {a.awayCount}×
+                        </span>
+                      ) : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-400">
+                      {a ? relativeTime(a.lastSync) : 'Bugün giriş yok'}
+                    </td>
+                    <td className="px-4 py-3">
+                      {a?.online ? (
+                        <span className="flex items-center gap-1.5 text-green-600 text-xs font-medium">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Çevrimiçi
+                        </span>
+                      ) : a ? (
+                        <span className="flex items-center gap-1.5 text-gray-400 text-xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-gray-300" /> Çevrimdışı
+                        </span>
+                      ) : (
+                        <span className="text-gray-300 text-xs">Giriş yok</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          <p className="text-xs text-gray-400 px-4 py-2 border-t bg-gray-50">
+            Veriler 30 saniyede bir güncellenir. Bugün = {new Date().toLocaleDateString('tr-TR')}.
+          </p>
+        </div>
+      )}
+
+      {/* Staff list tab */}
+      {activeTab === 'list' && (
 
       <div className="bg-white rounded-xl border overflow-hidden">
         {staff.length === 0 ? (
@@ -185,6 +308,8 @@ export function StaffManager({ initialStaff, currentUserId }: Props) {
           </table>
         )}
       </div>
+
+      )} {/* end list tab */}
 
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
