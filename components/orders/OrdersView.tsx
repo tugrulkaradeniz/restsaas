@@ -78,6 +78,7 @@ export function OrdersView({ tenantId, initialOrders, tables, categories, floorP
   const [cart, setCart] = useState<CartItem[]>([])
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [confirmPaymentId, setConfirmPaymentId] = useState<string | null>(null)
   const supabase = createClient()
 
   const activePlan = floorPlans[activePlanIdx]
@@ -435,22 +436,34 @@ export function OrdersView({ tenantId, initialOrders, tables, categories, floorP
               {activeItems.map(item => {
                 const inCart = cart.find(c => c.menuItemId === item.id)
                 return (
-                  <button
+                  <div
                     key={item.id}
-                    onClick={() => addToCart(item)}
+                    onClick={() => !inCart && addToCart(item)}
                     className={cn(
                       'text-left p-3 border rounded-xl bg-white transition-colors relative',
-                      inCart ? 'border-orange-300' : 'hover:border-orange-200'
+                      inCart ? 'border-orange-300 cursor-default' : 'hover:border-orange-200 cursor-pointer'
                     )}
                   >
-                    {inCart && (
-                      <span className="absolute top-2 right-2 w-5 h-5 bg-orange-500 text-white rounded-full text-xs flex items-center justify-center font-bold">
-                        {inCart.qty}
-                      </span>
-                    )}
-                    <p className="text-sm font-medium text-gray-900 pr-6 leading-tight">{item.name}</p>
+                    {inCart ? (
+                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-orange-500 rounded-full px-1.5 py-0.5">
+                        <button
+                          onClick={e => { e.stopPropagation(); removeFromCart(item.id) }}
+                          className="text-white hover:text-orange-200 leading-none"
+                        >
+                          <Minus size={11} />
+                        </button>
+                        <span className="text-white text-xs font-bold w-4 text-center">{inCart.qty}</span>
+                        <button
+                          onClick={e => { e.stopPropagation(); addToCart(item) }}
+                          className="text-white hover:text-orange-200 leading-none"
+                        >
+                          <Plus size={11} />
+                        </button>
+                      </div>
+                    ) : null}
+                    <p className="text-sm font-medium text-gray-900 pr-14 leading-tight">{item.name}</p>
                     <p className="text-orange-600 font-semibold text-sm mt-1">{formatCurrency(item.price)}</p>
-                  </button>
+                  </div>
                 )
               })}
               {activeItems.length === 0 && (
@@ -562,12 +575,34 @@ export function OrdersView({ tenantId, initialOrders, tables, categories, floorP
             {/* Aksiyonlar */}
             {!['paid','cancelled'].includes(selectedTableOrder.status) && (
               <div className="p-4 border-t bg-white shrink-0 space-y-2">
-                <button
-                  onClick={() => updateOrderStatus(selectedTableOrder.id, 'paid')}
-                  className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-semibold text-base"
-                >
-                  <CreditCard size={18} /> Hesap Al
-                </button>
+                {confirmPaymentId === selectedTableOrder.id ? (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-2">
+                    <p className="text-sm text-center text-gray-700 font-medium">
+                      {formatCurrency(selectedTableOrder.total_amount)} tutarında hesap alınacak. Onaylıyor musunuz?
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { updateOrderStatus(selectedTableOrder.id, 'paid'); setConfirmPaymentId(null) }}
+                        className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-2.5 rounded-lg font-semibold text-sm"
+                      >
+                        Evet, Hesabı Al
+                      </button>
+                      <button
+                        onClick={() => setConfirmPaymentId(null)}
+                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-lg text-sm"
+                      >
+                        İptal
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmPaymentId(selectedTableOrder.id)}
+                    className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-semibold text-base"
+                  >
+                    <CreditCard size={18} /> Hesap Al
+                  </button>
+                )}
                 <div className="flex gap-2">
                   {selectedTableOrder.status === 'pending' && (
                     <button

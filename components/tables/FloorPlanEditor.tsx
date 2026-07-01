@@ -46,6 +46,8 @@ export function FloorPlanEditor({ tenantId, initialFloorPlans, tables: propTable
   const [newTableCapacity, setNewTableCapacity] = useState('4')
   const [newTableShape, setNewTableShape] = useState<'rectangle' | 'round'>('rectangle')
   const [creatingTable, setCreatingTable] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deletingTable, setDeletingTable] = useState(false)
 
   const supabase = createClient()
   const activeFloorPlan = floorPlans[activeFloorPlanIdx]
@@ -92,6 +94,10 @@ export function FloorPlanEditor({ tenantId, initialFloorPlans, tables: propTable
 
   async function createNewTable() {
     if (!newTableName.trim()) { toast.error('Masa adı girin'); return }
+    const duplicate = localTables.find(
+      (t) => t.name.trim().toLowerCase() === newTableName.trim().toLowerCase()
+    )
+    if (duplicate) { toast.error(`"${newTableName.trim()}" adında bir masa zaten var`); return }
     setCreatingTable(true)
     const { data, error } = await supabase
       .from('tables')
@@ -107,6 +113,24 @@ export function FloorPlanEditor({ tenantId, initialFloorPlans, tables: propTable
     setNewTableCapacity('4')
     setShowNewTableForm(false)
     toast.success(`${data.name} oluşturuldu`)
+  }
+
+  async function deleteTableFromDB(tableId: string) {
+    const table = localTables.find((t) => t.id === tableId)
+    if (!table) return
+    setDeletingTable(true)
+    const { error } = await supabase.from('tables').delete().eq('id', tableId)
+    setDeletingTable(false)
+    if (error) { toast.error(error.message); return }
+    setLocalTables((prev) => prev.filter((t) => t.id !== tableId))
+    // Tüm floor plan'lardan kaldır
+    setFloorPlans((prev) => prev.map((fp) => ({
+      ...fp,
+      layout: { ...fp.layout, tables: fp.layout.tables.filter((lt) => lt.id !== tableId) }
+    })))
+    setSelectedId(null)
+    setConfirmDelete(false)
+    toast.success(`${table.name} silindi`)
   }
 
   async function saveLayout() {
@@ -268,13 +292,41 @@ export function FloorPlanEditor({ tenantId, initialFloorPlans, tables: propTable
             {activeFloorPlan?.name ?? 'Alan seçin veya oluşturun'}
           </span>
           <div className="flex items-center gap-2">
-            {isEditMode && selectedId && (
-              <button
-                onClick={() => removeFromCanvas(selectedId)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm"
-              >
-                <Trash2 size={14} /> Kaldır
-              </button>
+            {isEditMode && selectedId && !confirmDelete && (
+              <>
+                <button
+                  onClick={() => { removeFromCanvas(selectedId); setConfirmDelete(false) }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 text-orange-600 hover:bg-orange-100 rounded-lg text-sm"
+                >
+                  Plandan Kaldır
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm"
+                >
+                  <Trash2 size={14} /> Masayı Sil
+                </button>
+              </>
+            )}
+            {isEditMode && selectedId && confirmDelete && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600 font-medium">
+                  &quot;{localTables.find(t => t.id === selectedId)?.name}&quot; silinsin mi?
+                </span>
+                <button
+                  onClick={() => deleteTableFromDB(selectedId)}
+                  disabled={deletingTable}
+                  className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 disabled:opacity-50"
+                >
+                  {deletingTable ? 'Siliniyor...' : 'Evet, Sil'}
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200"
+                >
+                  İptal
+                </button>
+              </div>
             )}
             <button
               onClick={() => { setIsEditMode((v) => !v); setSelectedId(null) }}
