@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { UserRole } from '@/types/database'
+import { PresenceTimer } from './PresenceTimer'
 
 interface NavItem {
   href: string
@@ -79,14 +80,17 @@ export function Sidebar({ role, tenantName }: Props) {
         ))}
       </nav>
 
-      <div className="px-2 py-3 border-t border-gray-700">
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-gray-800 hover:text-white w-full transition-colors"
-        >
-          <LogOut size={18} />
-          Çıkış Yap
-        </button>
+      <div className="border-t border-gray-700 pt-2">
+        <PresenceTimer />
+        <div className="px-2 pb-3">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-gray-800 hover:text-white w-full transition-colors"
+          >
+            <LogOut size={18} />
+            Çıkış Yap
+          </button>
+        </div>
       </div>
     </aside>
   )
