@@ -9,7 +9,8 @@ import type {
   Order, Table, MenuCategory, MenuItem, OrderItem,
   OrderStatus, FloorPlan, FloorPlanTable, TableStatus,
 } from '@/types/database'
-import { Plus, Minus, ShoppingCart, Pencil, X, CreditCard, Banknote, Smartphone, LayoutGrid } from 'lucide-react'
+import { Plus, Minus, ShoppingCart, Pencil, X, CreditCard, Banknote, Smartphone, LayoutGrid, Printer } from 'lucide-react'
+import { printReceipt } from '@/lib/print'
 
 type FullOrder = Order & {
   table: Pick<Table, 'id' | 'name'> | null
@@ -58,6 +59,8 @@ const ACTIVE_STATUSES = ['confirmed', 'preparing', 'ready', 'delivered']
 
 interface Props {
   tenantId: string
+  tenantName: string
+  tenantAddress?: string | null
   initialOrders: FullOrder[]
   tables: Table[]
   categories: FullCategory[]
@@ -69,7 +72,7 @@ type PanelMode = 'none' | 'idle' | 'taking_order' | 'view_order'
 const TABLE_W = 80
 const TABLE_H = 60
 
-export function OrdersView({ tenantId, initialOrders, tables, categories, floorPlans }: Props) {
+export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders, tables, categories, floorPlans }: Props) {
   const [orders, setOrders] = useState<FullOrder[]>(initialOrders)
   const [activePlanIdx, setActivePlanIdx] = useState(0)
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null)
@@ -208,8 +211,26 @@ export function OrdersView({ tenantId, initialOrders, tables, categories, floorP
   }
 
   async function collectPayment(orderId: string, method: string) {
+    const order = orders.find(o => o.id === orderId)
+    const table = tables.find(t => t.id === order?.table_id)
     setConfirmPaymentId(null)
     await updateOrderStatus(orderId, 'paid', method)
+    if (order) {
+      printReceipt({
+        tenantName,
+        tenantAddress,
+        tableName: table?.name ?? order.table?.name ?? 'Paket',
+        orderCreatedAt: order.created_at,
+        items: (order.items ?? []).map(i => ({
+          name: i.menu_item?.name ?? '?',
+          quantity: i.quantity,
+          unit_price: i.unit_price,
+          note: i.note,
+        })),
+        totalAmount: order.total_amount,
+        paymentMethod: method,
+      })
+    }
   }
 
   const activeItems = categories.find(c => c.id === activeCategoryId)?.items.filter(i => i.is_available) ?? []
@@ -544,10 +565,30 @@ export function OrdersView({ tenantId, initialOrders, tables, categories, floorP
                 <p className="font-bold text-gray-900">{selectedTable.name}</p>
                 <p className="text-xs text-gray-500">{selectedTable.capacity} kişilik</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <span className={cn('text-xs px-2.5 py-1 rounded-full font-medium', STATUS_COLOR[selectedTableOrder.status])}>
                   {STATUS_LABEL[selectedTableOrder.status]}
                 </span>
+                <button
+                  title="Adisyon Yazdır"
+                  onClick={() => printReceipt({
+                    tenantName,
+                    tenantAddress,
+                    tableName: selectedTable.name,
+                    orderCreatedAt: selectedTableOrder.created_at,
+                    items: (selectedTableOrder.items ?? []).map(i => ({
+                      name: i.menu_item?.name ?? '?',
+                      quantity: i.quantity,
+                      unit_price: i.unit_price,
+                      note: i.note,
+                    })),
+                    totalAmount: selectedTableOrder.total_amount,
+                    paymentMethod: selectedTableOrder.payment_method,
+                  })}
+                  className="p-1.5 text-gray-400 hover:text-orange-500"
+                >
+                  <Printer size={16} />
+                </button>
                 <button
                   onClick={() => { setSelectedTableId(null); setPanelMode('none') }}
                   className="p-1.5 text-gray-400 hover:text-gray-600"

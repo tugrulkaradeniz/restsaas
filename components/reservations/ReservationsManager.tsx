@@ -82,11 +82,34 @@ export function ReservationsManager({ tenantId, initialReservations, tables }: P
     setShowForm(false)
   }
 
+  function toMinutes(time: string) {
+    const [h, m] = time.split(':').map(Number)
+    return h * 60 + m
+  }
+
   async function save() {
     if (!form.customer_name.trim()) { toast.error('Müşteri adı gerekli'); return }
     if (!form.customer_phone.trim()) { toast.error('Telefon gerekli'); return }
     if (!form.date) { toast.error('Tarih seçin'); return }
     if (!form.time) { toast.error('Saat seçin'); return }
+
+    // Çakışma kontrolü (aynı masa, aynı gün, ±2 saat)
+    if (form.table_id) {
+      const conflict = reservations.find(r =>
+        r.table_id === form.table_id &&
+        r.date === form.date &&
+        ['pending', 'confirmed'].includes(r.status) &&
+        Math.abs(toMinutes(r.time) - toMinutes(form.time)) < 120
+      )
+      if (conflict) {
+        toast.error(
+          `Bu masa ${conflict.time.slice(0, 5)}'de "${conflict.customer_name}" adına rezerve — 2 saat çakışıyor`,
+          { duration: 5000 }
+        )
+        return
+      }
+    }
+
     setSaving(true)
 
     const { data, error } = await supabase

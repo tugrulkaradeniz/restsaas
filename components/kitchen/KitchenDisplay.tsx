@@ -5,7 +5,8 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { Order, OrderItem, MenuItem, Table } from '@/types/database'
-import { CheckCircle, Clock, Volume2 } from 'lucide-react'
+import { CheckCircle, Clock, Volume2, Printer } from 'lucide-react'
+import { printKitchenTicket } from '@/lib/print'
 
 type KitchenOrder = Order & {
   table: Pick<Table, 'name'> | null
@@ -34,6 +35,7 @@ export function KitchenDisplay({ initialOrders }: Props) {
   const [orders, setOrders] = useState<KitchenOrder[]>(initialOrders)
   const [tick, setTick] = useState(0)
   const [soundEnabled, setSoundEnabled] = useState(true)
+  const [autoPrint, setAutoPrint] = useState(false)
   const supabase = createClient()
 
   // Süre sayacı
@@ -61,11 +63,24 @@ export function KitchenDisplay({ initialOrders }: Props) {
                 .eq('id', raw.id)
                 .single()
               if (!data) return
+              const ko = data as KitchenOrder
               setOrders((prev) => {
-                if (prev.some((o) => o.id === data.id)) return prev
-                return [data as KitchenOrder, ...prev]
+                if (prev.some((o) => o.id === ko.id)) return prev
+                return [ko, ...prev]
               })
               playBeep()
+              // Auto-print aktifse mutfak bileti bas
+              if (autoPrint) {
+                printKitchenTicket({
+                  tableName: ko.table?.name ?? 'Paket',
+                  items: (ko.items ?? []).map(i => ({
+                    name: i.menu_item?.name ?? '?',
+                    quantity: i.quantity,
+                    unit_price: 0,
+                    note: i.note,
+                  })),
+                })
+              }
             }, 800)
           }
           if (payload.eventType === 'UPDATE') {
@@ -129,16 +144,28 @@ export function KitchenDisplay({ initialOrders }: Props) {
           <h1 className="text-2xl font-bold">Mutfak Ekranı</h1>
           <p className="text-gray-400 text-sm">{orders.length} aktif sipariş</p>
         </div>
-        <button
-          onClick={() => setSoundEnabled((v) => !v)}
-          className={cn(
-            'flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors',
-            soundEnabled ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-400'
-          )}
-        >
-          <Volume2 size={16} />
-          {soundEnabled ? 'Ses Açık' : 'Ses Kapalı'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAutoPrint(v => !v)}
+            className={cn(
+              'flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors',
+              autoPrint ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-400'
+            )}
+          >
+            <Printer size={16} />
+            {autoPrint ? 'Oto-Baskı Açık' : 'Oto-Baskı Kapalı'}
+          </button>
+          <button
+            onClick={() => setSoundEnabled((v) => !v)}
+            className={cn(
+              'flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors',
+              soundEnabled ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-400'
+            )}
+          >
+            <Volume2 size={16} />
+            {soundEnabled ? 'Ses Açık' : 'Ses Kapalı'}
+          </button>
+        </div>
       </div>
 
       {orders.length === 0 ? (
@@ -192,6 +219,21 @@ export function KitchenDisplay({ initialOrders }: Props) {
 
               {/* Actions */}
               <div className="flex gap-2 mt-1">
+                <button
+                  onClick={() => printKitchenTicket({
+                    tableName: order.table?.name ?? 'Paket',
+                    items: (order.items ?? []).map(i => ({
+                      name: i.menu_item?.name ?? '?',
+                      quantity: i.quantity,
+                      unit_price: 0,
+                      note: i.note,
+                    })),
+                  })}
+                  className="px-2 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors"
+                  title="Mutfak Bileti Yazdır"
+                >
+                  <Printer size={15} />
+                </button>
                 {order.status === 'confirmed' && (
                   <button
                     onClick={() => markPreparing(order.id)}
