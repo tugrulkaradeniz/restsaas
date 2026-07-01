@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutGrid, UtensilsCrossed, ClipboardList, ChefHat,
   BarChart3, Settings, LogOut, Users, Package, Tag,
-  CalendarDays, Receipt
+  CalendarDays, Receipt, TrendingDown, Star
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -28,9 +28,11 @@ const navItems: NavItem[] = [
   { href: '/reservations',label: 'Rezervasyonlar', icon: <CalendarDays size={18} />,  roles: ['super_admin','owner','manager','cashier'] },
   { href: '/stock',       label: 'Stok',           icon: <Package size={18} />,       roles: ['super_admin','owner','manager'] },
   { href: '/campaigns',   label: 'Kampanyalar',    icon: <Tag size={18} />,           roles: ['super_admin','owner','manager'] },
-  { href: '/reports',     label: 'Raporlar',       icon: <Receipt size={18} />,       roles: ['super_admin','owner','manager'] },
-  { href: '/staff',       label: 'Personel',       icon: <Users size={18} />,         roles: ['super_admin','owner'] },
-  { href: '/settings',    label: 'Ayarlar',        icon: <Settings size={18} />,      roles: ['super_admin','owner'] },
+  { href: '/reports',    label: 'Raporlar',   icon: <Receipt size={18} />,      roles: ['super_admin','owner','manager'] },
+  { href: '/expenses',   label: 'Giderler',   icon: <TrendingDown size={18} />, roles: ['super_admin','owner','manager'] },
+  { href: '/customers',  label: 'Müşteriler', icon: <Star size={18} />,         roles: ['super_admin','owner','manager'] },
+  { href: '/staff',      label: 'Personel',   icon: <Users size={18} />,        roles: ['super_admin','owner'] },
+  { href: '/settings',   label: 'Ayarlar',    icon: <Settings size={18} />,     roles: ['super_admin','owner'] },
 ]
 
 interface Props {
