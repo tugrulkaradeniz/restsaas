@@ -137,6 +137,7 @@ export interface Order {
   points_used: number
   customer_phone: string | null
   customer_location: Record<string, unknown> | null
+  payment_method: string | null
   created_at: string
   table?: Table
   waiter?: User

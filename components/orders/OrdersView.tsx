@@ -9,7 +9,7 @@ import type {
   Order, Table, MenuCategory, MenuItem, OrderItem,
   OrderStatus, FloorPlan, FloorPlanTable, TableStatus,
 } from '@/types/database'
-import { Plus, Minus, ShoppingCart, Pencil, X, CreditCard, LayoutGrid } from 'lucide-react'
+import { Plus, Minus, ShoppingCart, Pencil, X, CreditCard, Banknote, Smartphone, LayoutGrid } from 'lucide-react'
 
 type FullOrder = Order & {
   table: Pick<Table, 'id' | 'name'> | null
@@ -195,14 +195,21 @@ export function OrdersView({ tenantId, initialOrders, tables, categories, floorP
     toast.success('Sipariş oluşturuldu')
   }
 
-  async function updateOrderStatus(orderId: string, status: OrderStatus) {
-    const { error } = await supabase.from('orders').update({ status }).eq('id', orderId)
+  async function updateOrderStatus(orderId: string, status: OrderStatus, paymentMethod?: string) {
+    const update: { status: OrderStatus; payment_method?: string } = { status }
+    if (paymentMethod) update.payment_method = paymentMethod
+    const { error } = await supabase.from('orders').update(update).eq('id', orderId)
     if (error) { toast.error(error.message); return }
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o))
     if (status === 'paid' || status === 'cancelled') {
       setPanelMode('idle')
       toast.success(status === 'paid' ? 'Hesap alındı' : 'İptal edildi')
     }
+  }
+
+  async function collectPayment(orderId: string, method: string) {
+    setConfirmPaymentId(null)
+    await updateOrderStatus(orderId, 'paid', method)
   }
 
   const activeItems = categories.find(c => c.id === activeCategoryId)?.items.filter(i => i.is_available) ?? []
@@ -576,24 +583,39 @@ export function OrdersView({ tenantId, initialOrders, tables, categories, floorP
             {!['paid','cancelled'].includes(selectedTableOrder.status) && (
               <div className="p-4 border-t bg-white shrink-0 space-y-2">
                 {confirmPaymentId === selectedTableOrder.id ? (
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-2">
-                    <p className="text-sm text-center text-gray-700 font-medium">
-                      {formatCurrency(selectedTableOrder.total_amount)} tutarında hesap alınacak. Onaylıyor musunuz?
+                  <div className="bg-gray-50 border rounded-xl p-3 space-y-2">
+                    <p className="text-xs text-center text-gray-500 uppercase tracking-wide font-medium">
+                      Ödeme Yöntemi — {formatCurrency(selectedTableOrder.total_amount)}
                     </p>
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <button
-                        onClick={() => { updateOrderStatus(selectedTableOrder.id, 'paid'); setConfirmPaymentId(null) }}
-                        className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-2.5 rounded-lg font-semibold text-sm"
+                        onClick={() => collectPayment(selectedTableOrder.id, 'cash')}
+                        className="flex flex-col items-center gap-1.5 py-3 bg-white border-2 border-transparent hover:border-emerald-400 rounded-xl transition-colors"
                       >
-                        Evet, Hesabı Al
+                        <Banknote size={22} className="text-emerald-600" />
+                        <span className="text-xs font-semibold text-gray-700">Nakit</span>
                       </button>
                       <button
-                        onClick={() => setConfirmPaymentId(null)}
-                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-lg text-sm"
+                        onClick={() => collectPayment(selectedTableOrder.id, 'card')}
+                        className="flex flex-col items-center gap-1.5 py-3 bg-white border-2 border-transparent hover:border-blue-400 rounded-xl transition-colors"
                       >
-                        İptal
+                        <CreditCard size={22} className="text-blue-600" />
+                        <span className="text-xs font-semibold text-gray-700">Kredi Kartı</span>
+                      </button>
+                      <button
+                        onClick={() => collectPayment(selectedTableOrder.id, 'pos')}
+                        className="flex flex-col items-center gap-1.5 py-3 bg-white border-2 border-transparent hover:border-purple-400 rounded-xl transition-colors"
+                      >
+                        <Smartphone size={22} className="text-purple-600" />
+                        <span className="text-xs font-semibold text-gray-700">POS / QR</span>
                       </button>
                     </div>
+                    <button
+                      onClick={() => setConfirmPaymentId(null)}
+                      className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-sm"
+                    >
+                      İptal
+                    </button>
                   </div>
                 ) : (
                   <button

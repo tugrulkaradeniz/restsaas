@@ -9,7 +9,7 @@ export default async function ReservationsPage() {
   const tenantId = user.app_metadata?.tenant_id as string
 
   const service = createServiceClient()
-  const [{ data: reservations }, { data: tables }] = await Promise.all([
+  const [{ data: reservations }, { data: allTables }, { data: floorPlans }] = await Promise.all([
     service
       .from('reservations')
       .select('*')
@@ -17,12 +17,19 @@ export default async function ReservationsPage() {
       .order('date', { ascending: false })
       .order('time', { ascending: true })
       .limit(200),
-    service
-      .from('tables')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .order('name'),
+    service.from('tables').select('*').eq('tenant_id', tenantId).order('name'),
+    service.from('floor_plans').select('id, layout').eq('tenant_id', tenantId),
   ])
+
+  // Sadece bir plana eklenmiş masaları göster; plan yoksa tüm masaları göster
+  const tableIdsOnPlans = new Set(
+    (floorPlans ?? []).flatMap(fp =>
+      ((fp.layout as { tables?: { id: string }[] })?.tables ?? []).map(t => t.id)
+    )
+  )
+  const tables = (floorPlans ?? []).length > 0
+    ? (allTables ?? []).filter(t => tableIdsOnPlans.has(t.id))
+    : (allTables ?? [])
 
   return (
     <div className="h-full flex flex-col">
