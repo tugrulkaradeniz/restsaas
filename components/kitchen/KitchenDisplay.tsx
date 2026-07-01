@@ -51,19 +51,31 @@ export function KitchenDisplay({ initialOrders }: Props) {
         { event: '*', schema: 'public', table: 'orders' },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            const newOrder = payload.new as KitchenOrder
-            if (['confirmed', 'preparing'].includes(newOrder.status)) {
-              setOrders((prev) => [newOrder, ...prev])
+            const raw = payload.new as Order
+            if (!['confirmed', 'preparing'].includes(raw.status)) return
+            // order_items henüz insert edilmemiş olabilir, 800ms bekle
+            setTimeout(async () => {
+              const { data } = await supabase
+                .from('orders')
+                .select('*, table:tables(name), items:order_items(*, menu_item:menu_items(name))')
+                .eq('id', raw.id)
+                .single()
+              if (!data) return
+              setOrders((prev) => {
+                if (prev.some((o) => o.id === data.id)) return prev
+                return [data as KitchenOrder, ...prev]
+              })
               playBeep()
-            }
+            }, 800)
           }
           if (payload.eventType === 'UPDATE') {
-            const updated = payload.new as KitchenOrder
+            const updated = payload.new as Order
             setOrders((prev) => {
               if (!['confirmed', 'preparing'].includes(updated.status)) {
                 return prev.filter((o) => o.id !== updated.id)
               }
-              return prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o))
+              // Sadece status güncelle, items/table mevcut state'den koru
+              return prev.map((o) => o.id === updated.id ? { ...o, status: updated.status } : o)
             })
           }
         }
