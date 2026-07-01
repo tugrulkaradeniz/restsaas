@@ -212,6 +212,38 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
     if (!selectedTableId || cart.length === 0) return
     setSubmitting(true)
 
+    // İlave sipariş: mevcut siparişe ürün ekleme
+    if (selectedTableOrder && !['paid', 'cancelled'].includes(selectedTableOrder.status)) {
+      const { error: iErr } = await supabase.from('order_items').insert(
+        cart.map(c => ({
+          order_id: selectedTableOrder.id,
+          menu_item_id: c.menuItemId,
+          quantity: c.qty,
+          unit_price: c.price,
+          note: c.note || null,
+          status: 'pending',
+        }))
+      )
+      if (iErr) { toast.error(iErr.message); setSubmitting(false); return }
+
+      const newTotal = selectedTableOrder.total_amount + cartTotal
+      await supabase.from('orders').update({ total_amount: newTotal }).eq('id', selectedTableOrder.id)
+
+      const { data: full } = await supabase
+        .from('orders')
+        .select('*, table:tables(id,name), waiter:users(full_name), items:order_items(*, menu_item:menu_items(id,name,price))')
+        .eq('id', selectedTableOrder.id)
+        .single()
+
+      if (full) setOrders(prev => prev.map(o => o.id === selectedTableOrder.id ? (full as unknown as FullOrder) : o))
+      setCart([])
+      setPanelMode('view_order')
+      setSubmitting(false)
+      toast.success('İlave sipariş eklendi')
+      return
+    }
+
+    // Yeni sipariş
     const { data: order, error: oErr } = await supabase
       .from('orders')
       .insert({
@@ -238,7 +270,6 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
     )
     if (iErr) { toast.error(iErr.message); setSubmitting(false); return }
 
-    // Fresh fetch with items
     const { data: full } = await supabase
       .from('orders')
       .select('*, table:tables(id,name), waiter:users(full_name), items:order_items(*, menu_item:menu_items(id,name,price))')
@@ -519,10 +550,15 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
             <div className="px-4 py-3 bg-white border-b flex items-center justify-between shrink-0">
               <div>
                 <p className="font-bold text-gray-900">{selectedTable.name}</p>
-                <p className="text-xs text-gray-500">Yeni Sipariş</p>
+                <p className="text-xs text-gray-500">
+                  {selectedTableOrder ? '➕ İlave Sipariş' : 'Yeni Sipariş'}
+                </p>
               </div>
               <button
-                onClick={() => { setPanelMode('idle'); setCart([]) }}
+                onClick={() => {
+                  setCart([])
+                  setPanelMode(selectedTableOrder ? 'view_order' : 'idle')
+                }}
                 className="p-1.5 text-gray-400 hover:text-gray-600"
               >
                 <X size={18} />
@@ -745,12 +781,20 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
                     </button>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => setConfirmPaymentId(selectedTableOrder.id)}
-                    className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-semibold text-base"
-                  >
-                    <CreditCard size={18} /> Hesap Al
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setConfirmPaymentId(selectedTableOrder.id)}
+                      className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-semibold text-base"
+                    >
+                      <CreditCard size={18} /> Hesap Al
+                    </button>
+                    <button
+                      onClick={() => { setCart([]); setPanelMode('taking_order') }}
+                      className="w-full flex items-center justify-center gap-2 bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 py-2.5 rounded-xl font-semibold text-sm"
+                    >
+                      <Plus size={16} /> İlave Sipariş Ekle
+                    </button>
+                  </>
                 )}
                 <div className="flex gap-2">
                   {selectedTableOrder.status === 'pending' && (
