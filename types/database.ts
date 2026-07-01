@@ -94,10 +94,13 @@ export interface MenuItem {
   description_public: string | null
   kdv_rate: number
   kdv_included: boolean
+  calories: number | null
   is_available: boolean
   is_visible_selfservis: boolean
   created_at: string
   allergens?: MenuItemAllergen[]
+  removables?: MenuItemRemovable[]
+  extras?: MenuItemExtra[]
   category?: MenuCategory
 }
 
@@ -105,6 +108,21 @@ export interface MenuItemAllergen {
   id: string
   menu_item_id: string
   allergen: string
+}
+
+export interface MenuItemRemovable {
+  id: string
+  menu_item_id: string
+  tenant_id: string
+  name: string
+}
+
+export interface MenuItemExtra {
+  id: string
+  menu_item_id: string
+  tenant_id: string
+  name: string
+  price: number
 }
 
 export interface Order {

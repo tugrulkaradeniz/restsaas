@@ -5,12 +5,14 @@ import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { cn, formatCurrency } from '@/lib/utils'
-import type { MenuCategory, MenuItem, MenuItemAllergen } from '@/types/database'
-import { Plus, Pencil, Trash2, CheckCircle, XCircle, FlaskConical, ImagePlus, X } from 'lucide-react'
+import type { MenuCategory, MenuItem, MenuItemAllergen, MenuItemRemovable, MenuItemExtra } from '@/types/database'
+import { Plus, Pencil, Trash2, CheckCircle, XCircle, FlaskConical, ImagePlus, X, Minus, Flame } from 'lucide-react'
 import { RecipeModal } from './RecipeModal'
 
 type FullMenuItem = MenuItem & {
   allergens: MenuItemAllergen[]
+  removables: MenuItemRemovable[]
+  extras: MenuItemExtra[]
   category: { name: string } | null
 }
 
@@ -21,7 +23,6 @@ interface Props {
 }
 
 const ALLERGENS = ['Gluten', 'Süt', 'Yumurta', 'Fındık', 'Susam', 'Balık', 'Kabuklu deniz ürünleri', 'Soya', 'Kereviz', 'Hardal']
-
 const KDV_RATES = [0, 1, 8, 10, 18, 20]
 
 function kdvLabel(rate: number, included: boolean) {
@@ -34,6 +35,9 @@ const blankItem = {
   is_available: true, is_visible_selfservis: true, category_id: '',
   allergens: [] as string[], image_url: null as string | null,
   kdv_rate: 10, kdv_included: true,
+  calories: '' as string,
+  removables: [] as string[],
+  extras: [] as { name: string; price: string }[],
 }
 
 export function MenuManager({ tenantId, initialCategories, initialItems }: Props) {
@@ -49,6 +53,8 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
   const [imageFile, setImageFile]       = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [uploading, setUploading]       = useState(false)
+  const [removableInput, setRemovableInput] = useState('')
+  const [extraInput, setExtraInput] = useState({ name: '', price: '' })
   const fileInputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
 
@@ -59,6 +65,8 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
     setEditingItemId(null)
     setImageFile(null)
     setImagePreview(null)
+    setRemovableInput('')
+    setExtraInput({ name: '', price: '' })
     setShowItemForm(true)
   }
 
@@ -76,11 +84,38 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
       image_url: item.image_url ?? null,
       kdv_rate: item.kdv_rate ?? 10,
       kdv_included: item.kdv_included ?? true,
+      calories: item.calories != null ? String(item.calories) : '',
+      removables: item.removables.map((r) => r.name),
+      extras: item.extras.map((e) => ({ name: e.name, price: String(e.price) })),
     })
     setEditingItemId(item.id)
     setImageFile(null)
     setImagePreview(item.image_url ?? null)
+    setRemovableInput('')
+    setExtraInput({ name: '', price: '' })
     setShowItemForm(true)
+  }
+
+  function addRemovable() {
+    const name = removableInput.trim()
+    if (!name) return
+    setEditingItem((p) => p ? { ...p, removables: [...(p.removables ?? []), name] } : p)
+    setRemovableInput('')
+  }
+
+  function removeRemovable(i: number) {
+    setEditingItem((p) => p ? { ...p, removables: (p.removables ?? []).filter((_, idx) => idx !== i) } : p)
+  }
+
+  function addExtra() {
+    const name = extraInput.name.trim()
+    if (!name) return
+    setEditingItem((p) => p ? { ...p, extras: [...(p.extras ?? []), { name, price: extraInput.price }] } : p)
+    setExtraInput({ name: '', price: '' })
+  }
+
+  function removeExtra(i: number) {
+    setEditingItem((p) => p ? { ...p, extras: (p.extras ?? []).filter((_, idx) => idx !== i) } : p)
   }
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -128,31 +163,51 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
       is_visible_selfservis: editingItem.is_visible_selfservis,
       kdv_rate: editingItem.kdv_rate ?? 10,
       kdv_included: editingItem.kdv_included ?? true,
+      calories: editingItem.calories ? parseInt(editingItem.calories) : null,
+    }
+
+    async function syncModifiers(itemId: string) {
+      await supabase.from('menu_item_allergens').delete().eq('menu_item_id', itemId)
+      if (editingItem!.allergens?.length) {
+        await supabase.from('menu_item_allergens').insert(
+          editingItem!.allergens.map((a) => ({ menu_item_id: itemId, allergen: a }))
+        )
+      }
+      await supabase.from('menu_item_removables').delete().eq('menu_item_id', itemId)
+      if (editingItem!.removables?.length) {
+        await supabase.from('menu_item_removables').insert(
+          editingItem!.removables.map((name) => ({ menu_item_id: itemId, tenant_id: tenantId, name }))
+        )
+      }
+      await supabase.from('menu_item_extras').delete().eq('menu_item_id', itemId)
+      if (editingItem!.extras?.length) {
+        await supabase.from('menu_item_extras').insert(
+          editingItem!.extras.map((e) => ({ menu_item_id: itemId, tenant_id: tenantId, name: e.name, price: parseFloat(e.price) || 0 }))
+        )
+      }
     }
 
     if (editingItemId) {
-      // Önce kaydet, sonra resim yükle (itemId gerekli)
       const imageUrl = await uploadImage(editingItemId)
       const payload  = { ...basePayload, image_url: imageUrl }
       const { error } = await supabase.from('menu_items').update(payload).eq('id', editingItemId)
       if (error) { toast.error(error.message); return }
-      await supabase.from('menu_item_allergens').delete().eq('menu_item_id', editingItemId)
-      if (editingItem.allergens?.length) {
-        await supabase.from('menu_item_allergens').insert(
-          editingItem.allergens.map((a) => ({ menu_item_id: editingItemId, allergen: a }))
-        )
-      }
+      await syncModifiers(editingItemId)
       setItems((prev) => prev.map((i) =>
         i.id === editingItemId
-          ? { ...i, ...payload, allergens: (editingItem.allergens ?? []).map((a) => ({ id: '', menu_item_id: editingItemId!, allergen: a })) } as FullMenuItem
+          ? {
+              ...i, ...payload,
+              allergens: (editingItem.allergens ?? []).map((a) => ({ id: '', menu_item_id: editingItemId!, allergen: a })),
+              removables: (editingItem.removables ?? []).map((name) => ({ id: '', menu_item_id: editingItemId!, tenant_id: tenantId, name })),
+              extras: (editingItem.extras ?? []).map((e) => ({ id: '', menu_item_id: editingItemId!, tenant_id: tenantId, name: e.name, price: parseFloat(e.price) || 0 })),
+            } as FullMenuItem
           : i
       ))
       toast.success('Ürün güncellendi')
     } else {
-      // Önce ürünü ekle, id al, sonra resim yükle
       const { data, error } = await supabase.from('menu_items')
         .insert({ ...basePayload, image_url: null })
-        .select('*, allergens:menu_item_allergens(*), category:menu_categories(name)')
+        .select('*, allergens:menu_item_allergens(*), removables:menu_item_removables(*), extras:menu_item_extras(*), category:menu_categories(name)')
         .single()
       if (error || !data) { toast.error(error?.message); return }
 
@@ -160,13 +215,12 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
       if (imageUrl) {
         await supabase.from('menu_items').update({ image_url: imageUrl }).eq('id', data.id)
       }
-
-      if (editingItem.allergens?.length) {
-        await supabase.from('menu_item_allergens').insert(
-          editingItem.allergens.map((a) => ({ menu_item_id: data.id, allergen: a }))
-        )
-      }
-      setItems((prev) => [...prev, { ...data, image_url: imageUrl } as FullMenuItem])
+      await syncModifiers(data.id)
+      setItems((prev) => [...prev, {
+        ...data, image_url: imageUrl,
+        removables: (editingItem.removables ?? []).map((name) => ({ id: '', menu_item_id: data.id, tenant_id: tenantId, name })),
+        extras: (editingItem.extras ?? []).map((e) => ({ id: '', menu_item_id: data.id, tenant_id: tenantId, name: e.name, price: parseFloat(e.price) || 0 })),
+      } as FullMenuItem])
       toast.success('Ürün eklendi')
     }
     setShowItemForm(false)
@@ -212,6 +266,15 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
           : [...allergens, allergen],
       }
     })
+  }
+
+  function closeForm() {
+    setShowItemForm(false)
+    setEditingItem(null)
+    setImageFile(null)
+    setImagePreview(null)
+    setRemovableInput('')
+    setExtraInput({ name: '', price: '' })
   }
 
   return (
@@ -260,16 +323,16 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
 
         <div className="space-y-2">
           {filteredItems.map((item) => (
-            <div key={item.id} className="bg-white rounded-xl border px-4 py-3 flex items-center gap-4">
+            <div key={item.id} className="bg-white rounded-xl border px-4 py-3 flex items-start gap-4">
               {/* Küçük resim */}
-              <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
+              <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center mt-0.5">
                 {item.image_url
                   ? <Image src={item.image_url} alt={item.name} width={48} height={48} className="w-full h-full object-cover" />
                   : <span className="text-gray-300 text-xl">🍽️</span>
                 }
               </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-medium text-gray-900">{item.name}</p>
                   {!item.is_available && (
                     <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Tükendi</span>
@@ -277,28 +340,54 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
                   {!item.is_visible_selfservis && (
                     <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Gizli</span>
                   )}
+                  {item.calories != null && (
+                    <span className="inline-flex items-center gap-1 text-xs bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full">
+                      <Flame size={11} />{item.calories} kcal
+                    </span>
+                  )}
                 </div>
                 {item.description_public && (
                   <p className="text-xs text-gray-500 mt-0.5">{item.description_public}</p>
                 )}
+                {/* Alerjenler */}
                 {item.allergens.length > 0 && (
-                  <div className="flex gap-1 mt-1 flex-wrap">
+                  <div className="flex gap-1 mt-1.5 flex-wrap">
                     {item.allergens.map((a) => (
                       <span key={a.id} className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 px-1.5 py-0.5 rounded">
-                        {a.allergen}
+                        ⚠ {a.allergen}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {/* Çıkarılabilir malzemeler */}
+                {item.removables.length > 0 && (
+                  <div className="flex gap-1 mt-1 flex-wrap">
+                    {item.removables.map((r) => (
+                      <span key={r.id} className="inline-flex items-center gap-0.5 text-xs bg-gray-50 text-gray-500 border border-gray-200 px-1.5 py-0.5 rounded">
+                        <Minus size={10} />{r.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {/* Ekstra malzemeler */}
+                {item.extras.length > 0 && (
+                  <div className="flex gap-1 mt-1 flex-wrap">
+                    {item.extras.map((e) => (
+                      <span key={e.id} className="inline-flex items-center gap-0.5 text-xs bg-green-50 text-green-700 border border-green-200 px-1.5 py-0.5 rounded">
+                        <Plus size={10} />{e.name}{e.price > 0 ? ` +${formatCurrency(e.price)}` : ''}
                       </span>
                     ))}
                   </div>
                 )}
               </div>
-              <div className="text-right">
+              <div className="text-right shrink-0">
                 <p className="font-semibold text-orange-600">{formatCurrency(item.price)}</p>
                 <p className="text-xs text-gray-400">{kdvLabel(item.kdv_rate ?? 10, item.kdv_included ?? true)}</p>
                 {item.cost && (
                   <p className="text-xs text-gray-400">Maliyet: {formatCurrency(item.cost)}</p>
                 )}
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 shrink-0">
                 <button onClick={() => toggleAvailable(item)} className="p-2 hover:bg-gray-100 rounded-lg" title={item.is_available ? 'Tükendi yap' : 'Mevcut yap'}>
                   {item.is_available ? <CheckCircle size={16} className="text-green-500" /> : <XCircle size={16} className="text-red-400" />}
                 </button>
@@ -343,7 +432,7 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
               {editingItemId ? 'Ürün Düzenle' : 'Yeni Ürün'}
             </h2>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               {/* Resim yükleme */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Ürün Resmi</label>
@@ -372,16 +461,21 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
                   className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Menemen" />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-1">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Satış Fiyatı (₺) *</label>
                   <input type="number" step="0.01" value={editingItem.price ?? ''} onChange={(e) => setEditingItem((p) => ({ ...p!, price: e.target.value }))}
                     className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="0.00" />
                 </div>
-                <div>
+                <div className="col-span-1">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Maliyet (₺)</label>
                   <input type="number" step="0.01" value={editingItem.cost ?? ''} onChange={(e) => setEditingItem((p) => ({ ...p!, cost: e.target.value }))}
                     className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="0.00" />
+                </div>
+                <div className="col-span-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Kalori (kcal)</label>
+                  <input type="number" min="0" value={editingItem.calories ?? ''} onChange={(e) => setEditingItem((p) => ({ ...p!, calories: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="0" />
                 </div>
               </div>
 
@@ -435,6 +529,7 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
                   className="w-full border rounded-lg px-3 py-2 text-sm" rows={2} placeholder="Müşteri göremez" />
               </div>
 
+              {/* Alerjenler */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Alerjenler</label>
                 <div className="flex flex-wrap gap-2">
@@ -450,6 +545,88 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Çıkarılabilir malzemeler */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Çıkarılabilir Malzemeler
+                  <span className="ml-1 text-xs font-normal text-gray-400">(soğansız, sossuz, mayonezsiz…)</span>
+                </label>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    value={removableInput}
+                    onChange={(e) => setRemovableInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addRemovable())}
+                    placeholder="Soğan, Sos, Mayonez…"
+                    className="flex-1 border rounded-lg px-3 py-2 text-sm"
+                  />
+                  <button type="button" onClick={addRemovable}
+                    className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium">
+                    Ekle
+                  </button>
+                </div>
+                {(editingItem.removables?.length ?? 0) > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {editingItem.removables!.map((name, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full">
+                        <Minus size={11} />{name}
+                        <button type="button" onClick={() => removeRemovable(i)} className="ml-0.5 text-gray-400 hover:text-red-500">
+                          <X size={11} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Ekstra malzemeler */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Ekstra Malzemeler
+                  <span className="ml-1 text-xs font-normal text-gray-400">(ekstra peynir, sos vb., 0 = ücretsiz)</span>
+                </label>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    value={extraInput.name}
+                    onChange={(e) => setExtraInput((p) => ({ ...p, name: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addExtra())}
+                    placeholder="Ekstra Peynir"
+                    className="flex-1 border rounded-lg px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="number" step="0.01" min="0"
+                    value={extraInput.price}
+                    onChange={(e) => setExtraInput((p) => ({ ...p, price: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addExtra())}
+                    placeholder="₺"
+                    className="w-20 border rounded-lg px-3 py-2 text-sm"
+                  />
+                  <button type="button" onClick={addExtra}
+                    className="px-3 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg text-sm font-medium">
+                    Ekle
+                  </button>
+                </div>
+                {(editingItem.extras?.length ?? 0) > 0 && (
+                  <div className="space-y-1.5">
+                    {editingItem.extras!.map((e, i) => (
+                      <div key={i} className="flex items-center justify-between bg-green-50 border border-green-100 rounded-lg px-3 py-1.5">
+                        <span className="text-sm text-green-800">
+                          <span className="font-medium">{e.name}</span>
+                          {e.price && parseFloat(e.price) > 0 && (
+                            <span className="ml-2 text-green-600">+{formatCurrency(parseFloat(e.price))}</span>
+                          )}
+                          {(!e.price || parseFloat(e.price) === 0) && (
+                            <span className="ml-2 text-green-500 text-xs">ücretsiz</span>
+                          )}
+                        </span>
+                        <button type="button" onClick={() => removeExtra(i)} className="text-gray-400 hover:text-red-500 ml-2">
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-4">
@@ -469,7 +646,7 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
                 className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white py-2.5 rounded-lg font-medium text-sm">
                 {uploading ? 'Resim yükleniyor...' : editingItemId ? 'Güncelle' : 'Ekle'}
               </button>
-              <button onClick={() => { setShowItemForm(false); setEditingItem(null); setImageFile(null); setImagePreview(null) }}
+              <button onClick={closeForm}
                 className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-lg font-medium text-sm">
                 İptal
               </button>

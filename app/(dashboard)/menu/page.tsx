@@ -14,7 +14,7 @@ export default async function MenuPage() {
     supabase.from('menu_categories').select('*').order('sort_order'),
     supabase
       .from('menu_items')
-      .select('*, allergens:menu_item_allergens(*), category:menu_categories(name)')
+      .select('*, allergens:menu_item_allergens(*), removables:menu_item_removables(*), extras:menu_item_extras(*), category:menu_categories(name)')
       .order('name'),
   ])
 
