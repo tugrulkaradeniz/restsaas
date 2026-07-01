@@ -82,6 +82,7 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
   const [panelMode, setPanelMode] = useState<PanelMode>('none')
   const [activeCategoryId, setActiveCategoryId] = useState(categories[0]?.id ?? '')
   const [pendingCalls, setPendingCalls] = useState<PendingCall[]>([])
+  const [mobileView, setMobileView] = useState<'plan' | 'panel'>('plan')
   const [cart, setCart] = useState<CartItem[]>([])
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -175,6 +176,14 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
     setEditingNoteId(null)
     const hasOrder = orders.some(o => o.table_id === tableId && ACTIVE_STATUSES.includes(o.status))
     setPanelMode(hasOrder ? 'view_order' : 'idle')
+    setMobileView('panel')
+  }
+
+  function backToTables() {
+    setMobileView('plan')
+    setSelectedTableId(null)
+    setPanelMode('none')
+    setCart([])
   }
 
   function addToCart(item: { id: string; name: string; price: number }) {
@@ -307,7 +316,10 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
 
       <div className="flex flex-1 overflow-hidden">
       {/* ===== Sol: Floor plan ===== */}
-      <div className="flex flex-col bg-white border-r" style={{ minWidth: 0, flex: '0 0 58%' }}>
+      <div className={cn(
+        'flex-col bg-white border-r shrink-0 w-full md:w-[58%]',
+        mobileView === 'panel' ? 'hidden md:flex' : 'flex'
+      )}>
         {/* Alan sekmeleri */}
         <div className="flex items-center gap-1 px-3 py-2 border-b bg-gray-50 overflow-x-auto shrink-0">
           {floorPlans.map((fp, i) => (
@@ -458,7 +470,17 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
       </div>
 
       {/* ===== Sağ: Sipariş paneli ===== */}
-      <div className="flex flex-col bg-gray-50 overflow-hidden" style={{ flex: '0 0 42%' }}>
+      <div className={cn(
+        'flex-col bg-gray-50 overflow-hidden flex-1',
+        mobileView === 'plan' ? 'hidden md:flex' : 'flex'
+      )}>
+        {/* Mobile: masalara dön */}
+        <button
+          onClick={backToTables}
+          className="md:hidden flex items-center gap-2 px-4 py-2.5 bg-white border-b text-sm font-medium text-gray-600 hover:bg-gray-50 shrink-0"
+        >
+          ← Masalara Dön
+        </button>
 
         {/* Masa seçilmedi */}
         {panelMode === 'none' && (

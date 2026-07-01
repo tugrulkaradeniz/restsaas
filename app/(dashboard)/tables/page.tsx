@@ -19,11 +19,19 @@ export default async function TablesPage() {
       .eq('date', new Date().toISOString().split('T')[0]),
   ])
 
+  // Sadece bir floor plan'da yer alan masaların QR kodlarını göster
+  const tableIdsInPlans = new Set(
+    (floorPlans ?? []).flatMap(fp => (fp.layout?.tables ?? []).map((t: { id: string }) => t.id))
+  )
+  const qrTables = tableIdsInPlans.size > 0
+    ? (tables ?? []).filter(t => tableIdsInPlans.has(t.id))
+    : (tables ?? [])
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Masa Planı</h1>
-        <QrCodesButton tables={tables ?? []} />
+        <QrCodesButton tables={qrTables} />
       </div>
       <FloorPlanEditor
         tenantId={tenantId}
