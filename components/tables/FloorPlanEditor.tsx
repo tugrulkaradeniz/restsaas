@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { FloorPlan, Table, Reservation, FloorPlanTable, TableStatus } from '@/types/database'
-import { Plus, Save, Pencil, Eye, Trash2 } from 'lucide-react'
+import { Plus, Save, Pencil, Trash2 } from 'lucide-react'
 
 const STATUS_COLORS: Record<TableStatus, string> = {
   empty:    '#22c55e',
@@ -283,7 +283,7 @@ export function FloorPlanEditor({ tenantId, initialFloorPlans, tables: propTable
                 isEditMode ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               )}
             >
-              {isEditMode ? <><Pencil size={14} /> Düzenleniyor</> : <><Eye size={14} /> Görünüm</>}
+              {isEditMode ? <><Pencil size={14} /> Düzenleniyor</> : <><Pencil size={14} /> Düzenle</>}
             </button>
             {isEditMode && (
               <button
@@ -299,8 +299,15 @@ export function FloorPlanEditor({ tenantId, initialFloorPlans, tables: propTable
         </div>
 
         {!activeFloorPlan ? (
-          <div className="flex items-center justify-center h-64 text-gray-400">
+          <div className="flex flex-col items-center justify-center h-64 text-gray-400 gap-2">
             <p>Önce sol panelden bir alan seçin veya oluşturun</p>
+          </div>
+        ) : layout.tables.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 text-gray-400 gap-3">
+            <p className="text-sm font-medium">Bu alanda henüz masa yok</p>
+            <p className="text-xs text-gray-300">
+              Sağ üstteki <strong className="text-orange-400">Düzenle</strong> butonuna tıklayıp sol panelden masa oluşturun
+            </p>
           </div>
         ) : (
           <Stage
