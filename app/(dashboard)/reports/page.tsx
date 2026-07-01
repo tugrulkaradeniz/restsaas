@@ -1,0 +1,253 @@
+import { createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { cn } from '@/lib/utils'
+import { TrendingUp, ShoppingBag, Receipt, Users } from 'lucide-react'
+import type { ReactNode } from 'react'
+
+type Period = 'today' | 'week' | 'month' | 'last_month'
+
+function getDateRange(period: Period): { start: string; end: string; label: string } {
+  const now = new Date()
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+
+  if (period === 'today') {
+    const s = fmt(now)
+    const e = new Date(now); e.setDate(e.getDate() + 1)
+    return { start: `${s}T00:00:00`, end: `${fmt(e)}T00:00:00`, label: 'Bugün' }
+  }
+  if (period === 'week') {
+    const s = new Date(now); s.setDate(s.getDate() - 6)
+    const e = new Date(now); e.setDate(e.getDate() + 1)
+    return { start: `${fmt(s)}T00:00:00`, end: `${fmt(e)}T00:00:00`, label: 'Son 7 Gün' }
+  }
+  if (period === 'month') {
+    const s = new Date(now); s.setDate(s.getDate() - 29)
+    const e = new Date(now); e.setDate(e.getDate() + 1)
+    return { start: `${fmt(s)}T00:00:00`, end: `${fmt(e)}T00:00:00`, label: 'Son 30 Gün' }
+  }
+  // last_month
+  const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  const firstOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  return {
+    start: `${fmt(firstOfLastMonth)}T00:00:00`,
+    end: `${fmt(firstOfThisMonth)}T00:00:00`,
+    label: 'Geçen Ay',
+  }
+}
+
+const fmt = new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' })
+const fmtNum = (n: number) => new Intl.NumberFormat('tr-TR').format(n)
+
+interface SearchParams { period?: string }
+
+export default async function ReportsPage({ searchParams }: { searchParams: SearchParams }) {
+  const period: Period = (['today','week','month','last_month'].includes(searchParams.period ?? '')
+    ? searchParams.period as Period
+    : 'today')
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+  const tenantId = user.app_metadata?.tenant_id as string
+
+  const { start, end, label } = getDateRange(period)
+  const service = createServiceClient()
+
+  // Ödenen siparişler
+  const { data: paidOrders } = await service
+    .from('orders')
+    .select('id, total_amount, created_at')
+    .eq('tenant_id', tenantId)
+    .eq('status', 'paid')
+    .gte('created_at', start)
+    .lt('created_at', end)
+
+  const orders = paidOrders ?? []
+  const revenue = orders.reduce((s, o) => s + (o.total_amount ?? 0), 0)
+  const orderCount = orders.length
+  const avgOrder = orderCount > 0 ? revenue / orderCount : 0
+
+  // Tüm sipariş sayısı (iptal dahil)
+  const { count: totalOrderCount } = await service
+    .from('orders')
+    .select('*', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .gte('created_at', start)
+    .lt('created_at', end)
+
+  // En çok satan ürünler
+  let topItems: { name: string; qty: number; revenue: number }[] = []
+  if (orders.length > 0) {
+    const orderIds = orders.map(o => o.id)
+    const { data: items } = await service
+      .from('order_items')
+      .select('menu_item_id, quantity, unit_price, menu_item:menu_items(name)')
+      .in('order_id', orderIds)
+
+    if (items) {
+      const map = new Map<string, { name: string; qty: number; revenue: number }>()
+      for (const item of items) {
+        const name = (item.menu_item as unknown as { name: string } | null)?.name ?? 'Bilinmeyen'
+        const existing = map.get(item.menu_item_id) ?? { name, qty: 0, revenue: 0 }
+        map.set(item.menu_item_id, {
+          name,
+          qty: existing.qty + item.quantity,
+          revenue: existing.revenue + item.quantity * item.unit_price,
+        })
+      }
+      topItems = Array.from(map.values())
+        .sort((a, b) => b.qty - a.qty)
+        .slice(0, 10)
+    }
+  }
+
+  // Günlük ciro (sadece bu periyot)
+  const dailyMap = new Map<string, number>()
+  for (const o of orders) {
+    const day = o.created_at.slice(0, 10)
+    dailyMap.set(day, (dailyMap.get(day) ?? 0) + (o.total_amount ?? 0))
+  }
+  const dailyRevenue = Array.from(dailyMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-14) // son 14 gün max
+
+  const maxDaily = Math.max(...dailyRevenue.map(([, v]) => v), 1)
+
+  const PERIODS: { key: Period; label: string }[] = [
+    { key: 'today',      label: 'Bugün' },
+    { key: 'week',       label: 'Son 7 Gün' },
+    { key: 'month',      label: 'Son 30 Gün' },
+    { key: 'last_month', label: 'Geçen Ay' },
+  ]
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Başlık + periyot seçici */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-gray-900">Raporlar</h1>
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+          {PERIODS.map(p => (
+            <Link
+              key={p.key}
+              href={`/reports?period=${p.key}`}
+              className={cn(
+                'px-4 py-1.5 rounded-lg text-sm font-medium transition-colors',
+                period === p.key ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              )}
+            >
+              {p.label}
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* Özet kartlar */}
+      <div className="grid grid-cols-4 gap-4">
+        <StatCard
+          icon={<TrendingUp size={20} className="text-green-600" />}
+          label="Toplam Ciro"
+          value={fmt.format(revenue)}
+          bg="bg-green-50"
+        />
+        <StatCard
+          icon={<Receipt size={20} className="text-blue-600" />}
+          label="Ödenen Sipariş"
+          value={fmtNum(orderCount)}
+          bg="bg-blue-50"
+        />
+        <StatCard
+          icon={<ShoppingBag size={20} className="text-orange-600" />}
+          label="Ort. Sipariş"
+          value={fmt.format(avgOrder)}
+          bg="bg-orange-50"
+        />
+        <StatCard
+          icon={<Users size={20} className="text-purple-600" />}
+          label="Toplam Sipariş"
+          value={fmtNum(totalOrderCount ?? 0)}
+          bg="bg-purple-50"
+        />
+      </div>
+
+      <div className="grid grid-cols-5 gap-4">
+        {/* En çok satan ürünler */}
+        <div className="col-span-3 bg-white rounded-xl border">
+          <div className="px-5 py-4 border-b">
+            <h2 className="font-semibold text-gray-900">En Çok Satan Ürünler</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{label} — ödenen siparişler</p>
+          </div>
+          {topItems.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-10">Veri yok</p>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="text-xs text-gray-500 border-b">
+                  <th className="px-5 py-2.5 text-left font-medium">#</th>
+                  <th className="px-5 py-2.5 text-left font-medium">Ürün</th>
+                  <th className="px-5 py-2.5 text-right font-medium">Adet</th>
+                  <th className="px-5 py-2.5 text-right font-medium">Ciro</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {topItems.map((item, i) => (
+                  <tr key={item.name} className="hover:bg-gray-50">
+                    <td className="px-5 py-3 text-sm text-gray-400">{i + 1}</td>
+                    <td className="px-5 py-3 text-sm font-medium text-gray-900">{item.name}</td>
+                    <td className="px-5 py-3 text-sm text-gray-700 text-right">{fmtNum(item.qty)}</td>
+                    <td className="px-5 py-3 text-sm font-medium text-gray-900 text-right">{fmt.format(item.revenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Günlük ciro grafiği */}
+        <div className="col-span-2 bg-white rounded-xl border">
+          <div className="px-5 py-4 border-b">
+            <h2 className="font-semibold text-gray-900">Günlük Ciro</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+          </div>
+          {dailyRevenue.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-10">Veri yok</p>
+          ) : (
+            <div className="px-5 py-4 space-y-2">
+              {dailyRevenue.map(([day, val]) => (
+                <div key={day} className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500 w-20 shrink-0">
+                    {new Date(day).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
+                  </span>
+                  <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+                    <div
+                      className="h-full bg-orange-400 rounded-full transition-all"
+                      style={{ width: `${(val / maxDaily) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-medium text-gray-700 w-20 text-right shrink-0">
+                    {fmt.format(val)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StatCard({ icon, label, value, bg }: { icon: ReactNode; label: string; value: string; bg: string }) {
+  return (
+    <div className="bg-white rounded-xl border p-5">
+      <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center mb-3', bg)}>
+        {icon}
+      </div>
+      <p className="text-sm text-gray-500">{label}</p>
+      <p className="text-2xl font-bold text-gray-900 mt-0.5">{value}</p>
+    </div>
+  )
+}

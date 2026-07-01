@@ -410,7 +410,7 @@ export function OrdersView({ tenantId, initialOrders, tables, categories }: Prop
                       />
                     )}
                     {item.note && editingNoteId !== item.menuItemId && (
-                      <p className="text-xs text-orange-500 mt-0.5 truncate">"{item.note}"</p>
+                      <p className="text-xs text-orange-500 mt-0.5 truncate">&quot;{item.note}&quot;</p>
                     )}
                     <div className="flex items-center justify-between mt-2">
                       <div className="flex items-center gap-2">
