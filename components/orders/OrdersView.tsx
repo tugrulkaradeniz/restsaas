@@ -13,7 +13,7 @@ import { Plus, Minus, ShoppingCart, Pencil, X, CreditCard, Banknote, Smartphone,
 import type { WaiterCall } from '@/types/database'
 
 type PendingCall = WaiterCall & { tableName: string }
-import { printReceipt } from '@/lib/print'
+import { printReceipt, printKitchenTicket } from '@/lib/print'
 
 type FullOrder = Order & {
   table: Pick<Table, 'id' | 'name'> | null
@@ -236,6 +236,14 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
         .single()
 
       if (full) setOrders(prev => prev.map(o => o.id === selectedTableOrder.id ? (full as unknown as FullOrder) : o))
+
+      // Sadece yeni kalemlerin mutfak biletini bas
+      printKitchenTicket({
+        tableName:   selectedTable?.name ?? '?',
+        orderNumber: `İlave #${selectedTableOrder.id.slice(-4).toUpperCase()}`,
+        items: cart.map(c => ({ name: c.name, quantity: c.qty, unit_price: c.price, note: c.note || null })),
+      })
+
       setCart([])
       setPanelMode('view_order')
       setSubmitting(false)
@@ -300,6 +308,14 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
     const table = tables.find(t => t.id === order?.table_id)
     setConfirmPaymentId(null)
     await updateOrderStatus(orderId, 'paid', method)
+
+    // Stok düşümü — fire-and-forget, arka planda çalışır
+    fetch('/api/stock/deduct-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId }),
+    }).catch(() => {})
+
     if (order) {
       printReceipt({
         tenantName,
