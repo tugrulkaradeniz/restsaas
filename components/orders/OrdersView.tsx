@@ -9,7 +9,7 @@ import type {
   Order, Table, MenuCategory, MenuItem, OrderItem,
   OrderStatus, FloorPlan, FloorPlanTable, TableStatus,
 } from '@/types/database'
-import { Plus, Minus, ShoppingCart, Pencil, X, CreditCard, Banknote, Smartphone, LayoutGrid, Printer, BellRing, Check } from 'lucide-react'
+import { Plus, Minus, ShoppingCart, Pencil, X, CreditCard, Banknote, Smartphone, LayoutGrid, Printer, BellRing, Check, Globe, MapPin, Phone, ChevronRight, Package } from 'lucide-react'
 import type { WaiterCall } from '@/types/database'
 
 type PendingCall = WaiterCall & { tableName: string }
@@ -77,6 +77,9 @@ const TABLE_H = 60
 
 export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders, tables, categories, floorPlans }: Props) {
   const [orders, setOrders] = useState<FullOrder[]>(initialOrders)
+  const [mainView, setMainView] = useState<'floor' | 'online'>('floor')
+  const [selectedOnlineId, setSelectedOnlineId] = useState<string | null>(null)
+  const [onlineMobileView, setOnlineMobileView] = useState<'list' | 'detail'>('list')
   const [activePlanIdx, setActivePlanIdx] = useState(0)
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null)
   const [panelMode, setPanelMode] = useState<PanelMode>('none')
@@ -115,14 +118,28 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
   useEffect(() => {
     const ordersChannel = supabase
       .channel('orders-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const newO = payload.new as Order
+          if (newO.source === 'online') {
+            const { data: full } = await supabase
+              .from('orders')
+              .select('*, table:tables(id,name), waiter:users(full_name), items:order_items(*, menu_item:menu_items(id,name,price))')
+              .eq('id', newO.id)
+              .single()
+            if (full) setOrders(prev => [full as unknown as FullOrder, ...prev])
+            toast('🛍️ Yeni online sipariş!', {
+              duration: 20_000,
+              style: { background: '#7c3aed', color: '#fff' },
+            })
+          }
+        }
         if (payload.eventType === 'UPDATE') {
           const u = payload.new as Order
           setOrders(prev => {
             const existing = prev.find(o => o.id === u.id)
-            // Yemek hazır bildirimi
             if (existing && u.status === 'ready' && existing.status !== 'ready') {
-              const tableName = existing.table?.name ?? 'Paket sipariş'
+              const tableName = existing.table?.name ?? 'Online sipariş'
               toast.success(`🍽️ ${tableName} hazır! Servis edilebilir.`, {
                 duration: 15_000,
                 style: { background: '#16a34a', color: '#fff' },
@@ -341,10 +358,225 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
     (fp.layout as { tables: FloorPlanTable[] })?.tables?.some(lt => lt.id === t.id)
   ))
 
+  // Online siparişler
+  const onlineOrders = orders.filter(o => o.source === 'online' && !['paid', 'cancelled'].includes(o.status))
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  const selectedOnlineOrder = onlineOrders.find(o => o.id === selectedOnlineId) ?? null
+
+  async function updateOnlineStatus(orderId: string, status: OrderStatus) {
+    await supabase.from('orders').update({ status }).eq('id', orderId)
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o))
+  }
+
+  function onlineNextStatus(status: OrderStatus, deliveryType: string | null): { label: string; next: OrderStatus } | null {
+    if (status === 'pending')   return { label: 'Onayla',             next: 'confirmed' }
+    if (status === 'confirmed') return { label: 'Hazırlamaya Başla',  next: 'preparing' }
+    if (status === 'preparing') return { label: 'Hazır',              next: 'ready' }
+    if (status === 'ready' && deliveryType === 'delivery') return { label: 'Teslim Edildi', next: 'delivered' }
+    if (status === 'ready' && deliveryType === 'pickup')   return { label: 'Teslim / Ödendi', next: 'paid' }
+    if (status === 'delivered') return { label: 'Ödendi',             next: 'paid' }
+    return null
+  }
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      {/* Ana sekme bar */}
+      <div className="flex items-center gap-1 px-3 py-2 bg-white border-b shrink-0">
+        <button
+          onClick={() => setMainView('floor')}
+          className={cn('px-4 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5',
+            mainView === 'floor' ? 'bg-orange-500 text-white' : 'text-gray-600 hover:bg-gray-100')}
+        >
+          <LayoutGrid size={14} /> Masa Planı
+        </button>
+        <button
+          onClick={() => setMainView('online')}
+          className={cn('px-4 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5',
+            mainView === 'online' ? 'bg-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100')}
+        >
+          <Globe size={14} /> Online Siparişler
+          {onlineOrders.length > 0 && (
+            <span className={cn('text-xs rounded-full px-1.5 py-0.5 font-bold',
+              mainView === 'online' ? 'bg-white text-purple-600' : 'bg-purple-100 text-purple-700')}>
+              {onlineOrders.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Online siparişler paneli */}
+      {mainView === 'online' && (
+        <div className="flex flex-1 overflow-hidden">
+          {/* Liste */}
+          <div className={cn('flex-col border-r bg-white w-full md:w-80 shrink-0',
+            onlineMobileView === 'detail' ? 'hidden md:flex' : 'flex')}>
+            <div className="px-3 py-2 border-b bg-gray-50 shrink-0">
+              <p className="text-xs text-gray-500 font-medium">
+                {onlineOrders.length === 0 ? 'Bekleyen online sipariş yok' : `${onlineOrders.length} aktif sipariş`}
+              </p>
+            </div>
+            <div className="flex-1 overflow-y-auto divide-y">
+              {onlineOrders.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-48 text-gray-400 gap-2">
+                  <Globe size={32} className="text-gray-200" />
+                  <p className="text-sm">Bekleyen sipariş yok</p>
+                </div>
+              ) : onlineOrders.map(order => (
+                <button
+                  key={order.id}
+                  onClick={() => { setSelectedOnlineId(order.id); setOnlineMobileView('detail') }}
+                  className={cn('w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors',
+                    selectedOnlineId === order.id ? 'bg-purple-50 border-l-2 border-purple-500' : '')}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="font-semibold text-sm text-gray-900">
+                      {order.customer_name ?? 'İsimsiz'}
+                    </span>
+                    <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', STATUS_COLOR[order.status])}>
+                      {STATUS_LABEL[order.status]}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span className="flex items-center gap-1">
+                      {order.delivery_type === 'delivery'
+                        ? <><MapPin size={10} /> Teslimat</>
+                        : <><Package size={10} /> Gel Al</>}
+                    </span>
+                    <span>{formatCurrency(order.total_amount)}</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {new Date(order.created_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Detay */}
+          <div className={cn('flex-col flex-1 bg-gray-50 overflow-hidden',
+            onlineMobileView === 'list' ? 'hidden md:flex' : 'flex')}>
+            {!selectedOnlineOrder ? (
+              <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
+                <ChevronRight size={32} className="text-gray-200" />
+                <p className="text-sm">Sipariş seçin</p>
+              </div>
+            ) : (
+              <div className="flex flex-col h-full overflow-hidden">
+                {/* Detay header */}
+                <div className="flex items-center gap-2 px-4 py-3 bg-white border-b shrink-0">
+                  <button onClick={() => setOnlineMobileView('list')} className="md:hidden p-1 text-gray-400">
+                    <X size={16} />
+                  </button>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-gray-900">{selectedOnlineOrder.customer_name ?? 'İsimsiz'}</h3>
+                    <p className="text-xs text-gray-500">#{selectedOnlineOrder.id.slice(-8).toUpperCase()}</p>
+                  </div>
+                  <span className={cn('text-xs px-2.5 py-1 rounded-full font-medium', STATUS_COLOR[selectedOnlineOrder.status])}>
+                    {STATUS_LABEL[selectedOnlineOrder.status]}
+                  </span>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {/* Müşteri bilgileri */}
+                  <div className="bg-white rounded-xl border p-4 space-y-2">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Müşteri</h4>
+                    {selectedOnlineOrder.customer_name && (
+                      <p className="text-sm font-medium text-gray-900">{selectedOnlineOrder.customer_name}</p>
+                    )}
+                    {selectedOnlineOrder.customer_phone && (
+                      <a href={`tel:${selectedOnlineOrder.customer_phone}`}
+                        className="flex items-center gap-2 text-sm text-orange-500 hover:text-orange-700">
+                        <Phone size={13} /> {selectedOnlineOrder.customer_phone}
+                      </a>
+                    )}
+                    {selectedOnlineOrder.customer_email && (
+                      <p className="text-xs text-gray-500">{selectedOnlineOrder.customer_email}</p>
+                    )}
+                  </div>
+
+                  {/* Teslimat bilgileri */}
+                  <div className="bg-white rounded-xl border p-4 space-y-2">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      {selectedOnlineOrder.delivery_type === 'delivery' ? 'Teslimat' : 'Gel Al'}
+                    </h4>
+                    {selectedOnlineOrder.delivery_address && (
+                      <div className="flex items-start gap-2 text-sm text-gray-700">
+                        <MapPin size={14} className="text-gray-400 shrink-0 mt-0.5" />
+                        <span>{selectedOnlineOrder.delivery_address}</span>
+                      </div>
+                    )}
+                    {(selectedOnlineOrder.delivery_fee ?? 0) > 0 && (
+                      <p className="text-xs text-gray-500">Teslimat ücreti: {formatCurrency(selectedOnlineOrder.delivery_fee ?? 0)}</p>
+                    )}
+                    {selectedOnlineOrder.order_note && (
+                      <p className="text-xs text-gray-500 italic">Not: {selectedOnlineOrder.order_note}</p>
+                    )}
+                  </div>
+
+                  {/* Sipariş kalemleri */}
+                  <div className="bg-white rounded-xl border overflow-hidden">
+                    <div className="px-4 py-2.5 border-b bg-gray-50">
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Siparişler</h4>
+                    </div>
+                    <div className="divide-y">
+                      {selectedOnlineOrder.items.map(item => (
+                        <div key={item.id} className="px-4 py-3 flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-900">
+                              {item.quantity}× {item.menu_item?.name ?? 'Ürün'}
+                            </span>
+                            {item.selected_options && item.selected_options.length > 0 && (
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                {item.selected_options.map(o => o.option_name).join(', ')}
+                              </p>
+                            )}
+                            {item.note && <p className="text-xs text-gray-400 italic mt-0.5">{item.note}</p>}
+                          </div>
+                          <span className="text-sm font-semibold text-gray-900 shrink-0">
+                            {formatCurrency((item.unit_price ?? item.menu_item?.price ?? 0) * item.quantity)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="px-4 py-3 border-t bg-gray-50 flex items-center justify-between">
+                      <span className="text-sm font-bold text-gray-900">Toplam</span>
+                      <span className="text-base font-bold text-orange-500">{formatCurrency(selectedOnlineOrder.total_amount)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Aksiyon butonları */}
+                <div className="border-t bg-white px-4 py-3 shrink-0 flex gap-2">
+                  {(() => {
+                    const next = onlineNextStatus(selectedOnlineOrder.status, selectedOnlineOrder.delivery_type)
+                    return next ? (
+                      <button
+                        onClick={() => updateOnlineStatus(selectedOnlineOrder.id, next.next)}
+                        className="flex-1 bg-purple-600 text-white rounded-xl py-2.5 font-semibold text-sm hover:bg-purple-700"
+                      >
+                        {next.label}
+                      </button>
+                    ) : (
+                      <div className="flex-1 text-center text-sm text-green-600 font-semibold py-2.5">
+                        ✓ Tamamlandı
+                      </div>
+                    )
+                  })()}
+                  <button
+                    onClick={() => updateOnlineStatus(selectedOnlineOrder.id, 'cancelled')}
+                    className="px-4 py-2.5 border border-red-200 text-red-500 rounded-xl text-sm hover:bg-red-50"
+                  >
+                    İptal
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Garson çağrıları banner */}
-      {pendingCalls.length > 0 && (
+      {mainView === 'floor' && pendingCalls.length > 0 && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center gap-3 shrink-0">
           <BellRing size={16} className="text-amber-500 animate-bounce shrink-0" />
           <div className="flex-1 flex flex-wrap gap-2">
@@ -361,7 +593,7 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
         </div>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
+      {mainView === 'floor' && <div className="flex flex-1 overflow-hidden">
       {/* ===== Sol: Floor plan ===== */}
       <div className={cn(
         'flex-col bg-white border-r shrink-0 w-full md:w-[58%]',
@@ -841,7 +1073,7 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
           </div>
         )}
       </div>
-      </div>
+      </div>}
     </div>
   )
 }
