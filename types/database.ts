@@ -28,7 +28,66 @@ export interface Tenant {
   kitchen_printer_ip: string | null
   address: string | null
   logo_url: string | null
+  phone: string | null
+  online_ordering_enabled: boolean
+  cuisine_type_ids: string[]
+  lat: number | null
+  lng: number | null
+  online_order_hours: Record<string, { open: string; close: string }> | null
   created_at: string
+}
+
+export interface CuisineType {
+  id: string
+  name: string
+  emoji: string | null
+  sort_order: number
+  is_active: boolean
+  created_at: string
+}
+
+export interface DeliveryZone {
+  id: string
+  tenant_id: string
+  name: string
+  max_distance_km: number
+  min_order_amount: number
+  delivery_fee: number
+  estimated_minutes: number
+  is_active: boolean
+  sort_order: number
+  created_at: string
+}
+
+export interface ItemOptionGroup {
+  id: string
+  menu_item_id: string
+  tenant_id: string
+  name: string
+  is_required: boolean
+  max_select: number
+  sort_order: number
+  options?: ItemOption[]
+}
+
+export interface ItemOption {
+  id: string
+  group_id: string
+  tenant_id: string
+  name: string
+  price_delta: number
+  sort_order: number
+  is_active: boolean
+}
+
+export interface VerifiedCustomer {
+  id: string
+  phone: string
+  email: string | null
+  name: string | null
+  verification_token: string
+  first_verified_at: string
+  last_order_at: string | null
 }
 
 export interface WaiterCall {
@@ -151,6 +210,16 @@ export interface Order {
   customer_phone: string | null
   customer_location: Record<string, unknown> | null
   payment_method: string | null
+  // online ordering fields
+  customer_name: string | null
+  customer_email: string | null
+  delivery_address: string | null
+  delivery_lat: number | null
+  delivery_lng: number | null
+  delivery_type: 'pickup' | 'delivery' | null
+  delivery_zone_id: string | null
+  delivery_fee: number
+  order_note: string | null
   created_at: string
   table?: Table
   waiter?: User
@@ -165,7 +234,14 @@ export interface OrderItem {
   unit_price: number
   note: string | null
   status: OrderItemStatus
+  selected_options: SelectedOption[] | null
   menu_item?: MenuItem
+}
+
+export interface SelectedOption {
+  group_name: string
+  option_name: string
+  price_delta: number
 }
 
 export interface Payment {

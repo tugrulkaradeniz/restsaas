@@ -6,8 +6,9 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { cn, formatCurrency } from '@/lib/utils'
 import type { MenuCategory, MenuItem, MenuItemAllergen, MenuItemRemovable, MenuItemExtra } from '@/types/database'
-import { Plus, Pencil, Trash2, CheckCircle, XCircle, FlaskConical, ImagePlus, X, Minus, Flame } from 'lucide-react'
+import { Plus, Pencil, Trash2, CheckCircle, XCircle, FlaskConical, ImagePlus, X, Minus, Flame, Settings2 } from 'lucide-react'
 import { RecipeModal } from './RecipeModal'
+import { ItemOptionsModal } from './ItemOptionsModal'
 
 type FullMenuItem = MenuItem & {
   allergens: MenuItemAllergen[]
@@ -50,6 +51,7 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
   const [showCatForm, setShowCatForm]   = useState(false)
   const [newCatName, setNewCatName]     = useState('')
   const [recipeItem, setRecipeItem]     = useState<FullMenuItem | null>(null)
+  const [optionsItem, setOptionsItem]   = useState<FullMenuItem | null>(null)
   const [imageFile, setImageFile]       = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [uploading, setUploading]       = useState(false)
@@ -394,6 +396,9 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
                 <button onClick={() => setRecipeItem(item)} className="p-2 hover:bg-orange-50 rounded-lg" title="Reçete">
                   <FlaskConical size={16} className="text-orange-400" />
                 </button>
+                <button onClick={() => setOptionsItem(item)} className="p-2 hover:bg-purple-50 rounded-lg" title="Seçenekler">
+                  <Settings2 size={16} className="text-purple-400" />
+                </button>
                 <button onClick={() => openEditItem(item)} className="p-2 hover:bg-gray-100 rounded-lg">
                   <Pencil size={16} className="text-gray-400" />
                 </button>
@@ -421,6 +426,15 @@ export function MenuManager({ tenantId, initialCategories, initialItems }: Props
             setItems((prev) => prev.map((i) => i.id === id ? { ...i, cost } : i))
             setRecipeItem(null)
           }}
+        />
+      )}
+
+      {optionsItem && (
+        <ItemOptionsModal
+          menuItemId={optionsItem.id}
+          menuItemName={optionsItem.name}
+          tenantId={tenantId}
+          onClose={() => setOptionsItem(null)}
         />
       )}
 

@@ -2,14 +2,15 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Building2, Users, LogOut, ShieldCheck } from 'lucide-react'
+import { LayoutDashboard, Building2, Users, LogOut, ShieldCheck, UtensilsCrossed } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
 const navItems = [
-  { href: '/super-admin',         label: 'Genel Bakış',  icon: <LayoutDashboard size={18} />, exact: true },
-  { href: '/super-admin/tenants', label: 'Restoranlar',  icon: <Building2 size={18} />,       exact: false },
-  { href: '/super-admin/users',   label: 'Kullanıcılar', icon: <Users size={18} />,           exact: false },
+  { href: '/super-admin',                  label: 'Genel Bakış',   icon: <LayoutDashboard size={18} />, exact: true },
+  { href: '/super-admin/tenants',          label: 'Restoranlar',   icon: <Building2 size={18} />,       exact: false },
+  { href: '/super-admin/users',            label: 'Kullanıcılar',  icon: <Users size={18} />,           exact: false },
+  { href: '/super-admin/cuisine-types',    label: 'Mutfak Tipleri',icon: <UtensilsCrossed size={18} />, exact: false },
 ]
 
 export function SuperAdminSidebar() {
