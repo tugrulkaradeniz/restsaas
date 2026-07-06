@@ -41,10 +41,10 @@ export async function middleware(request: NextRequest) {
   const isApiWebhook = pathname.startsWith('/api/webhooks')
   const isApiRoute = pathname.startsWith('/api/')
 
-  // Giriş yapılmamış → login'e yönlendir
+  // Giriş yapılmamış → ana sayfa müşteri marketplace'ine, diğer korumalı sayfalar login'e yönlensin
   if (!user && !isPublicPath && !isApiWebhook && !isApiRoute) {
     const url = request.nextUrl.clone()
-    url.pathname = '/login'
+    url.pathname = pathname === '/' ? '/order' : '/login'
     return NextResponse.redirect(url)
   }
 

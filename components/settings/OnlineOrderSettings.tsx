@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { Plus, Trash2, MapPin, Clock, ToggleLeft, ToggleRight, Globe } from 'lucide-react'
+import { Plus, Trash2, Pencil, MapPin, Clock, ToggleLeft, ToggleRight, Globe } from 'lucide-react'
 import type { Tenant, CuisineType, DeliveryZone } from '@/types/database'
 
 const DAYS = [
@@ -37,6 +37,12 @@ export function OnlineOrderSettings({ tenant, cuisineTypes, initialZones }: Prop
   const [saving, setSaving] = useState(false)
 
   const [newZone, setNewZone] = useState({
+    name: '', max_distance_km: '', min_order_amount: '',
+    delivery_fee: '', estimated_minutes: '30',
+  })
+
+  const [editingZoneId, setEditingZoneId] = useState<string | null>(null)
+  const [editZone, setEditZone] = useState({
     name: '', max_distance_km: '', min_order_amount: '',
     delivery_fee: '', estimated_minutes: '30',
   })
@@ -113,6 +119,33 @@ export function OnlineOrderSettings({ tenant, cuisineTypes, initialZones }: Prop
   async function toggleZone(id: string, current: boolean) {
     await supabase.from('delivery_zones').update({ is_active: !current }).eq('id', id)
     setZones(prev => prev.map(z => z.id === id ? { ...z, is_active: !current } : z))
+  }
+
+  function startEditZone(z: DeliveryZone) {
+    setEditingZoneId(z.id)
+    setEditZone({
+      name: z.name,
+      max_distance_km: z.max_distance_km.toString(),
+      min_order_amount: z.min_order_amount.toString(),
+      delivery_fee: z.delivery_fee.toString(),
+      estimated_minutes: z.estimated_minutes.toString(),
+    })
+  }
+
+  async function saveEditZone(id: string) {
+    if (!editZone.name || !editZone.max_distance_km) { toast.error('İsim ve mesafe zorunlu'); return }
+    const patch = {
+      name: editZone.name,
+      max_distance_km: parseFloat(editZone.max_distance_km),
+      min_order_amount: parseFloat(editZone.min_order_amount || '0'),
+      delivery_fee: parseFloat(editZone.delivery_fee || '0'),
+      estimated_minutes: parseInt(editZone.estimated_minutes || '30'),
+    }
+    const { error } = await supabase.from('delivery_zones').update(patch).eq('id', id)
+    if (error) { toast.error(error.message); return }
+    setZones(prev => prev.map(z => z.id === id ? { ...z, ...patch } : z))
+    setEditingZoneId(null)
+    toast.success('Bölge güncellendi')
   }
 
   return (
@@ -238,23 +271,86 @@ export function OnlineOrderSettings({ tenant, cuisineTypes, initialZones }: Prop
         {zones.length > 0 && (
           <div className="bg-white border rounded-xl divide-y mb-4">
             {zones.map(z => (
-              <div key={z.id} className="flex items-center gap-3 px-4 py-3 flex-wrap">
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm text-gray-900">{z.name}</p>
-                  <p className="text-xs text-gray-500">
-                    Maks {z.max_distance_km} km · Min {z.min_order_amount}₺ · Teslimat {z.delivery_fee}₺ · ~{z.estimated_minutes} dk
-                  </p>
+              editingZoneId === z.id ? (
+                <div key={z.id} className="px-4 py-3 space-y-3 bg-orange-50/50">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div className="col-span-2 md:col-span-1">
+                      <label className="text-xs text-gray-500 block mb-1">Bölge Adı</label>
+                      <input
+                        value={editZone.name} onChange={e => setEditZone(p => ({ ...p, name: e.target.value }))}
+                        className="border rounded-lg px-3 py-2 text-sm w-full bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 block mb-1">Maks Mesafe (km)</label>
+                      <input
+                        type="number" value={editZone.max_distance_km}
+                        onChange={e => setEditZone(p => ({ ...p, max_distance_km: e.target.value }))}
+                        className="border rounded-lg px-3 py-2 text-sm w-full bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 block mb-1">Min Sipariş (₺)</label>
+                      <input
+                        type="number" value={editZone.min_order_amount}
+                        onChange={e => setEditZone(p => ({ ...p, min_order_amount: e.target.value }))}
+                        className="border rounded-lg px-3 py-2 text-sm w-full bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 block mb-1">Teslimat Ücreti (₺)</label>
+                      <input
+                        type="number" value={editZone.delivery_fee}
+                        onChange={e => setEditZone(p => ({ ...p, delivery_fee: e.target.value }))}
+                        className="border rounded-lg px-3 py-2 text-sm w-full bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 block mb-1">Tahmini Süre (dk)</label>
+                      <input
+                        type="number" value={editZone.estimated_minutes}
+                        onChange={e => setEditZone(p => ({ ...p, estimated_minutes: e.target.value }))}
+                        className="border rounded-lg px-3 py-2 text-sm w-full bg-white"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => saveEditZone(z.id)}
+                      className="px-4 py-1.5 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600"
+                    >
+                      Kaydet
+                    </button>
+                    <button
+                      onClick={() => setEditingZoneId(null)}
+                      className="px-4 py-1.5 bg-white border rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+                    >
+                      İptal
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => toggleZone(z.id, z.is_active)}
-                  className={`text-xs px-2.5 py-1 rounded-full font-medium ${z.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
-                >
-                  {z.is_active ? 'Aktif' : 'Pasif'}
-                </button>
-                <button onClick={() => deleteZone(z.id)} className="p-1.5 text-gray-400 hover:text-red-600">
-                  <Trash2 size={14} />
-                </button>
-              </div>
+              ) : (
+                <div key={z.id} className="flex items-center gap-3 px-4 py-3 flex-wrap">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm text-gray-900">{z.name}</p>
+                    <p className="text-xs text-gray-500">
+                      Maks {z.max_distance_km} km · Min {z.min_order_amount}₺ · Teslimat {z.delivery_fee}₺ · ~{z.estimated_minutes} dk
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => toggleZone(z.id, z.is_active)}
+                    className={`text-xs px-2.5 py-1 rounded-full font-medium ${z.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+                  >
+                    {z.is_active ? 'Aktif' : 'Pasif'}
+                  </button>
+                  <button onClick={() => startEditZone(z)} className="p-1.5 text-gray-400 hover:text-blue-600">
+                    <Pencil size={14} />
+                  </button>
+                  <button onClick={() => deleteZone(z.id)} className="p-1.5 text-gray-400 hover:text-red-600">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              )
             ))}
           </div>
         )}

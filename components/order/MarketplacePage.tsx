@@ -93,8 +93,15 @@ export function MarketplacePage({ cuisineTypes, restaurants }: Props) {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-orange-500 text-white px-4 pt-10 pb-6">
-        <h1 className="text-2xl font-bold mb-1">Ne yemek istersin?</h1>
-        <p className="text-orange-100 text-sm mb-4">En yakın restoranlardan sipariş ver</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold mb-1">Ne yemek istersin?</h1>
+            <p className="text-orange-100 text-sm mb-4">En yakın restoranlardan sipariş ver</p>
+          </div>
+          <Link href="/login" className="text-xs text-orange-100 hover:text-white underline shrink-0 pt-1">
+            Restoran mısınız?
+          </Link>
+        </div>
 
         {/* Konum */}
         {userLat ? (
