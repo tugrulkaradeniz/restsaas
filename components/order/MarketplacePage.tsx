@@ -98,9 +98,14 @@ export function MarketplacePage({ cuisineTypes, restaurants }: Props) {
             <h1 className="text-2xl font-bold mb-1">Ne yemek istersin?</h1>
             <p className="text-orange-100 text-sm mb-4">En yakın restoranlardan sipariş ver</p>
           </div>
-          <Link href="/login" className="text-xs text-orange-100 hover:text-white underline shrink-0 pt-1">
-            Restoran mısınız?
-          </Link>
+          <div className="flex flex-col items-end gap-1.5 shrink-0 pt-1">
+            <Link href="/account" className="text-xs text-orange-100 hover:text-white underline">
+              Hesabım
+            </Link>
+            <Link href="/login" className="text-xs text-orange-100 hover:text-white underline">
+              Restoran mısınız?
+            </Link>
+          </div>
         </div>
 
         {/* Konum */}

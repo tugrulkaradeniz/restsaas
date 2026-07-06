@@ -5,7 +5,7 @@ import { X, MapPin, Package, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/utils'
 import type { CartItem } from './RestaurantOrderPage'
-import type { DeliveryZone } from '@/types/database'
+import type { DeliveryZone, CustomerAddress } from '@/types/database'
 
 type Tenant = {
   id: string; slug: string; name: string; lat: number | null; lng: number | null; phone: string | null
@@ -41,6 +41,7 @@ export function CheckoutModal({ tenant, cart, cartTotal, zones, onClose, onSucce
   const [locating, setLocating] = useState(false)
   const [sending, setSending] = useState(false)
   const [verifying, setVerifying] = useState(false)
+  const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([])
 
   // En uygun bölgeyi hesapla
   const eligibleZone: DeliveryZone | null = (() => {
@@ -54,6 +55,20 @@ export function CheckoutModal({ tenant, cart, cartTotal, zones, onClose, onSucce
 
   const deliveryFee = eligibleZone?.delivery_fee ?? 0
   const grandTotal = cartTotal + deliveryFee
+
+  // Bu telefon numarası daha önce doğrulanmışsa kayıtlı adreslerini göster
+  async function checkSavedAddresses() {
+    if (!form.phone.trim()) return
+    const token = localStorage.getItem(`vc_token_${form.phone}`)
+    if (!token) { setSavedAddresses([]); return }
+    const res = await fetch('/api/customer/addresses/list', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: form.phone, token }),
+    })
+    if (!res.ok) { setSavedAddresses([]); return }
+    const data = await res.json()
+    setSavedAddresses(data.addresses ?? [])
+  }
 
   function getLocation() {
     setLocating(true)
@@ -91,6 +106,7 @@ export function CheckoutModal({ tenant, cart, cartTotal, zones, onClose, onSucce
         body: JSON.stringify({ phone: form.phone, token }),
       })
       if (res.ok) {
+        localStorage.setItem('vc_last_phone', form.phone)
         await placeOrder(token)
         return
       }
@@ -128,6 +144,7 @@ export function CheckoutModal({ tenant, cart, cartTotal, zones, onClose, onSucce
     setVerifying(false)
     if (!res.ok) { toast.error(data.error ?? 'Kod hatalı'); return }
     localStorage.setItem(`vc_token_${form.phone}`, data.token)
+    localStorage.setItem('vc_last_phone', form.phone)
     await placeOrder(data.token)
   }
 
@@ -292,6 +309,7 @@ export function CheckoutModal({ tenant, cart, cartTotal, zones, onClose, onSucce
                     type={f.type}
                     value={form[f.key as keyof typeof form]}
                     onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+                    onBlur={f.key === 'phone' ? checkSavedAddresses : undefined}
                     placeholder={f.placeholder}
                     className="w-full border rounded-xl px-4 py-2.5 text-sm"
                   />
@@ -301,6 +319,20 @@ export function CheckoutModal({ tenant, cart, cartTotal, zones, onClose, onSucce
               {deliveryType === 'delivery' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Teslimat Adresi *</label>
+                  {savedAddresses.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {savedAddresses.map(a => (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => setForm(p => ({ ...p, address: a.address }))}
+                          className="px-2.5 py-1 rounded-full text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100"
+                        >
+                          📍 {a.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <textarea
                     value={form.address}
                     onChange={e => setForm(p => ({ ...p, address: e.target.value }))}

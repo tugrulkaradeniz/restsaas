@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowLeft, ShoppingCart, Plus, Minus, X, Phone } from 'lucide-react'
+import { ArrowLeft, ShoppingCart, Plus, Minus, X, Phone, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/utils'
 import type { DeliveryZone } from '@/types/database'
@@ -177,6 +177,9 @@ export function RestaurantOrderPage({ tenant, categories, items, zones }: Props)
             <h1 className="font-bold text-gray-900 truncate">{tenant.name}</h1>
             {tenant.address && <p className="text-xs text-gray-400 truncate">{tenant.address}</p>}
           </div>
+          <Link href="/account" className="p-2 text-gray-400 hover:text-orange-500 shrink-0" title="Hesabım">
+            <User size={20} />
+          </Link>
         </div>
 
         {/* Kategori tabları */}

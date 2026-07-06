@@ -36,7 +36,7 @@ export async function middleware(request: NextRequest) {
     supabaseResponse.headers.set('x-tenant-slug', subdomain)
   }
 
-  const publicPaths = ['/login', '/register', '/admin/login', '/forgot-password', '/menu', '/order', '/rezervasyon']
+  const publicPaths = ['/login', '/register', '/admin/login', '/forgot-password', '/menu', '/order', '/account', '/rezervasyon']
   const isPublicPath = publicPaths.some((p) => pathname.startsWith(p))
   const isApiWebhook = pathname.startsWith('/api/webhooks')
   const isApiRoute = pathname.startsWith('/api/')

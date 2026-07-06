@@ -41,6 +41,7 @@ export async function POST(req: Request) {
       total_amount: totalAmount,
       discount_amount: 0,
       points_used: 0,
+      verified_customer_id: vc.id,
       customer_name: customerName,
       customer_phone: customerPhone,
       customer_email: customerEmail,

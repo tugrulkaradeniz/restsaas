@@ -90,6 +90,17 @@ export interface VerifiedCustomer {
   last_order_at: string | null
 }
 
+export interface CustomerAddress {
+  id: string
+  verified_customer_id: string
+  label: string
+  address: string
+  lat: number | null
+  lng: number | null
+  is_default: boolean
+  created_at: string
+}
+
 export interface WaiterCall {
   id: string
   tenant_id: string
