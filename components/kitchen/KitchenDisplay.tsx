@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -31,12 +31,38 @@ function urgencyColor(createdAt: string): string {
   return 'border-gray-200 bg-white'
 }
 
+const SOUND_PREF_KEY = 'kitchen_sound_enabled'
+
 export function KitchenDisplay({ initialOrders }: Props) {
   const [orders, setOrders] = useState<KitchenOrder[]>(initialOrders)
   const [tick, setTick] = useState(0)
   const [soundEnabled, setSoundEnabled] = useState(true)
+  const [soundUnlocked, setSoundUnlocked] = useState(false)
   const [autoPrint, setAutoPrint] = useState(false)
   const supabase = createClient()
+  const audioCtxRef = useRef<AudioContext | null>(null)
+
+  useEffect(() => {
+    const saved = localStorage.getItem(SOUND_PREF_KEY)
+    if (saved !== null) setSoundEnabled(saved === 'true')
+  }, [])
+
+  // Ses tarayıcı politikası gereği ilk kullanıcı etkileşimine kadar sessiz kalır —
+  // ekrana ilk dokunuşta AudioContext'i kalıcı olarak "kilidini aç"
+  useEffect(() => {
+    function unlock() {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContext()
+      }
+      audioCtxRef.current.resume().then(() => setSoundUnlocked(true))
+    }
+    document.addEventListener('pointerdown', unlock)
+    document.addEventListener('keydown', unlock)
+    return () => {
+      document.removeEventListener('pointerdown', unlock)
+      document.removeEventListener('keydown', unlock)
+    }
+  }, [])
 
   // Süre sayacı
   useEffect(() => {
@@ -103,17 +129,30 @@ export function KitchenDisplay({ initialOrders }: Props) {
   function playBeep() {
     if (!soundEnabled) return
     try {
-      const ctx = new AudioContext()
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.frequency.value = 880
-      gain.gain.setValueAtTime(0.3, ctx.currentTime)
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5)
-      osc.start()
-      osc.stop(ctx.currentTime + 0.5)
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
+      const ctx = audioCtxRef.current
+      if (ctx.state === 'suspended') ctx.resume()
+      // İki kısa bip — tek nota tek başına kolayca fark edilmiyor
+      for (const delay of [0, 0.3]) {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        osc.frequency.value = 880
+        gain.gain.setValueAtTime(0.3, ctx.currentTime + delay)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.25)
+        osc.start(ctx.currentTime + delay)
+        osc.stop(ctx.currentTime + delay + 0.25)
+      }
     } catch {}
+  }
+
+  function toggleSound() {
+    setSoundEnabled((v) => {
+      const next = !v
+      localStorage.setItem(SOUND_PREF_KEY, String(next))
+      return next
+    })
   }
 
   async function markPreparing(orderId: string) {
@@ -156,7 +195,7 @@ export function KitchenDisplay({ initialOrders }: Props) {
             {autoPrint ? 'Oto-Baskı Açık' : 'Oto-Baskı Kapalı'}
           </button>
           <button
-            onClick={() => setSoundEnabled((v) => !v)}
+            onClick={toggleSound}
             className={cn(
               'flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors',
               soundEnabled ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-400'
@@ -167,6 +206,18 @@ export function KitchenDisplay({ initialOrders }: Props) {
           </button>
         </div>
       </div>
+
+      {soundEnabled && !soundUnlocked && (
+        <button
+          onClick={() => {
+            if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
+            audioCtxRef.current.resume().then(() => setSoundUnlocked(true))
+          }}
+          className="w-full mb-4 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-sm rounded-lg px-4 py-2.5 text-center hover:bg-amber-500/30 transition-colors"
+        >
+          🔔 Sipariş sesini etkinleştirmek için buraya dokunun
+        </button>
+      )}
 
       {orders.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-gray-500">

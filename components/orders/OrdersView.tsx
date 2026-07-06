@@ -9,11 +9,14 @@ import type {
   Order, Table, MenuCategory, MenuItem, OrderItem,
   OrderStatus, FloorPlan, FloorPlanTable, TableStatus,
 } from '@/types/database'
-import { Plus, Minus, ShoppingCart, Pencil, X, CreditCard, Banknote, Smartphone, LayoutGrid, Printer, BellRing, Check, Globe, MapPin, Phone, ChevronRight, Package } from 'lucide-react'
+import { Plus, Minus, ShoppingCart, Pencil, X, CreditCard, Banknote, Smartphone, LayoutGrid, Printer, BellRing, Check, Globe, MapPin, Phone, ChevronRight, Package, Gift, History, Sparkles } from 'lucide-react'
 import type { WaiterCall } from '@/types/database'
 
 type PendingCall = WaiterCall & { tableName: string }
 import { printReceipt, printKitchenTicket } from '@/lib/print'
+import { computeBestCampaignDiscount } from '@/lib/campaigns'
+import type { Campaign } from '@/components/campaigns/types'
+import { HistoryPanel } from './HistoryPanel'
 
 type FullOrder = Order & {
   table: Pick<Table, 'id' | 'name'> | null
@@ -29,6 +32,7 @@ interface CartItem {
   price: number
   qty: number
   note: string
+  isComp: boolean
 }
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
@@ -68,6 +72,7 @@ interface Props {
   tables: Table[]
   categories: FullCategory[]
   floorPlans: FloorPlan[]
+  campaigns: Campaign[]
 }
 
 type PanelMode = 'none' | 'idle' | 'taking_order' | 'view_order'
@@ -75,9 +80,10 @@ type PanelMode = 'none' | 'idle' | 'taking_order' | 'view_order'
 const TABLE_W = 80
 const TABLE_H = 60
 
-export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders, tables, categories, floorPlans }: Props) {
+export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders, tables, categories, floorPlans, campaigns }: Props) {
   const [orders, setOrders] = useState<FullOrder[]>(initialOrders)
-  const [mainView, setMainView] = useState<'floor' | 'online'>('floor')
+  const [localTables, setLocalTables] = useState<Table[]>(tables)
+  const [mainView, setMainView] = useState<'floor' | 'online' | 'history'>('floor')
   const [selectedOnlineId, setSelectedOnlineId] = useState<string | null>(null)
   const [onlineMobileView, setOnlineMobileView] = useState<'list' | 'detail'>('list')
   const [activePlanIdx, setActivePlanIdx] = useState(0)
@@ -105,11 +111,11 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
 
   function getTableStatus(tableId: string): TableStatus {
     if (occupiedTableIds.has(tableId)) return 'occupied'
-    const t = tables.find(t => t.id === tableId)
+    const t = localTables.find(t => t.id === tableId)
     return t?.status ?? 'empty'
   }
 
-  const selectedTable = tables.find(t => t.id === selectedTableId)
+  const selectedTable = localTables.find(t => t.id === selectedTableId)
   const selectedTableOrder = selectedTableId
     ? orders.find(o => o.table_id === selectedTableId && ACTIVE_STATUSES.includes(o.status))
     : undefined
@@ -207,8 +213,12 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
     setCart(prev => {
       const ex = prev.find(c => c.menuItemId === item.id)
       if (ex) return prev.map(c => c.menuItemId === item.id ? { ...c, qty: c.qty + 1 } : c)
-      return [...prev, { menuItemId: item.id, name: item.name, price: item.price, qty: 1, note: '' }]
+      return [...prev, { menuItemId: item.id, name: item.name, price: item.price, qty: 1, note: '', isComp: false }]
     })
+  }
+
+  function toggleComp(menuItemId: string) {
+    setCart(prev => prev.map(c => c.menuItemId === menuItemId ? { ...c, isComp: !c.isComp } : c))
   }
 
   function removeFromCart(menuItemId: string) {
@@ -223,7 +233,18 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
     setCart(prev => prev.map(c => c.menuItemId === menuItemId ? { ...c, note } : c))
   }
 
-  const cartTotal = cart.reduce((s, c) => s + c.price * c.qty, 0)
+  const cartSubtotal = cart.reduce((s, c) => s + (c.isComp ? 0 : c.price) * c.qty, 0)
+
+  const categoriesForDiscount = categories.map(c => ({ id: c.id, items: c.items.map(i => ({ id: i.id })) }))
+  const cartDiscount = !selectedTableOrder
+    ? computeBestCampaignDiscount(
+        cart.map(c => ({ menuItemId: c.menuItemId, price: c.isComp ? 0 : c.price, qty: c.qty })),
+        campaigns,
+        categoriesForDiscount
+      )
+    : null
+  const cartDiscountAmount = cartDiscount?.amount ?? 0
+  const cartFinalTotal = cartSubtotal - cartDiscountAmount
 
   async function submitOrder() {
     if (!selectedTableId || cart.length === 0) return
@@ -236,14 +257,15 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
           order_id: selectedTableOrder.id,
           menu_item_id: c.menuItemId,
           quantity: c.qty,
-          unit_price: c.price,
+          unit_price: c.isComp ? 0 : c.price,
           note: c.note || null,
           status: 'pending',
+          is_complimentary: c.isComp,
         }))
       )
       if (iErr) { toast.error(iErr.message); setSubmitting(false); return }
 
-      const newTotal = selectedTableOrder.total_amount + cartTotal
+      const newTotal = selectedTableOrder.total_amount + cartSubtotal
       await supabase.from('orders').update({ total_amount: newTotal }).eq('id', selectedTableOrder.id)
 
       const { data: full } = await supabase
@@ -276,7 +298,8 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
         table_id: selectedTableId,
         source: 'waiter',
         status: 'confirmed',
-        total_amount: cartTotal,
+        total_amount: cartFinalTotal,
+        discount_amount: cartDiscountAmount,
       })
       .select('*, table:tables(id,name), waiter:users(full_name), items:order_items(*, menu_item:menu_items(id,name,price))')
       .single()
@@ -288,9 +311,10 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
         order_id: order.id,
         menu_item_id: c.menuItemId,
         quantity: c.qty,
-        unit_price: c.price,
+        unit_price: c.isComp ? 0 : c.price,
         note: c.note || null,
         status: 'pending',
+        is_complimentary: c.isComp,
       }))
     )
     if (iErr) { toast.error(iErr.message); setSubmitting(false); return }
@@ -322,9 +346,15 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
 
   async function collectPayment(orderId: string, method: string) {
     const order = orders.find(o => o.id === orderId)
-    const table = tables.find(t => t.id === order?.table_id)
+    const table = localTables.find(t => t.id === order?.table_id)
     setConfirmPaymentId(null)
     await updateOrderStatus(orderId, 'paid', method)
+
+    // Ödeme alınan masa temizlenmeyi bekliyor
+    if (order?.table_id) {
+      await supabase.from('tables').update({ status: 'dirty' }).eq('id', order.table_id)
+      setLocalTables(prev => prev.map(t => t.id === order.table_id ? { ...t, status: 'dirty' } : t))
+    }
 
     // Stok düşümü — fire-and-forget, arka planda çalışır
     fetch('/api/stock/deduct-order', {
@@ -351,10 +381,17 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
     }
   }
 
+  async function markTableClean(tableId: string) {
+    const { error } = await supabase.from('tables').update({ status: 'empty' }).eq('id', tableId)
+    if (error) { toast.error(error.message); return }
+    setLocalTables(prev => prev.map(t => t.id === tableId ? { ...t, status: 'empty' } : t))
+    toast.success('Masa temizlendi')
+  }
+
   const activeItems = categories.find(c => c.id === activeCategoryId)?.items.filter(i => i.is_available) ?? []
 
   // Tablodan masalar (floor plan dışındakiler için fallback)
-  const tablesNotOnPlan = tables.filter(t => !floorPlans.some(fp =>
+  const tablesNotOnPlan = localTables.filter(t => !floorPlans.some(fp =>
     (fp.layout as { tables: FloorPlanTable[] })?.tables?.some(lt => lt.id === t.id)
   ))
 
@@ -402,7 +439,18 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
             </span>
           )}
         </button>
+        <button
+          onClick={() => setMainView('history')}
+          className={cn('px-4 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5',
+            mainView === 'history' ? 'bg-gray-700 text-white' : 'text-gray-600 hover:bg-gray-100')}
+        >
+          <History size={14} /> Geçmiş
+        </button>
       </div>
+
+      {mainView === 'history' && (
+        <HistoryPanel tenantName={tenantName} tenantAddress={tenantAddress} />
+      )}
 
       {/* Online siparişler paneli */}
       {mainView === 'online' && (
@@ -648,7 +696,7 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
               >
                 <Layer>
                   {layout.tables.map((lt: FloorPlanTable) => {
-                    const table = tables.find(t => t.id === lt.id)
+                    const table = localTables.find(t => t.id === lt.id)
                     const status = getTableStatus(lt.id)
                     const color = TABLE_COLORS[status]
                     const isSelected = selectedTableId === lt.id
@@ -712,7 +760,7 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
             <div className="p-4">
               <p className="text-xs text-gray-400 mb-3">Tüm masalar</p>
               <div className="grid grid-cols-4 gap-2">
-                {tables.map(t => {
+                {localTables.map(t => {
                   const status = getTableStatus(t.id)
                   return (
                     <button
@@ -774,8 +822,18 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
           <div className="flex flex-col items-center justify-center h-full gap-4 p-6">
             <div className="text-center">
               <p className="text-2xl font-bold text-gray-900">{selectedTable.name}</p>
-              <p className="text-gray-500 mt-1">{selectedTable.capacity} kişilik · Boş</p>
+              <p className="text-gray-500 mt-1">
+                {selectedTable.capacity} kişilik · {getTableStatus(selectedTable.id) === 'dirty' ? 'Kirli — temizlenmeli' : 'Boş'}
+              </p>
             </div>
+            {getTableStatus(selectedTable.id) === 'dirty' && (
+              <button
+                onClick={() => markTableClean(selectedTable.id)}
+                className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-xl font-medium text-base"
+              >
+                <Sparkles size={18} /> Masayı Temizle
+              </button>
+            )}
             <button
               onClick={() => setPanelMode('taking_order')}
               className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-medium text-base"
@@ -882,7 +940,14 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
                         >
                           <Minus size={14} />
                         </button>
-                        <span className="flex-1 text-sm text-gray-800 truncate">{item.name}</span>
+                        <span className={cn('flex-1 text-sm truncate', item.isComp ? 'text-emerald-600' : 'text-gray-800')}>{item.name}</span>
+                        <button
+                          onClick={() => toggleComp(item.menuItemId)}
+                          title="İkram olarak işaretle"
+                          className={cn('shrink-0', item.isComp ? 'text-emerald-500' : 'text-gray-300 hover:text-emerald-500')}
+                        >
+                          <Gift size={13} />
+                        </button>
                         <button
                           onClick={() => setEditingNoteId(editingNoteId === item.menuItemId ? null : item.menuItemId)}
                           className="text-gray-300 hover:text-orange-500 shrink-0"
@@ -890,8 +955,8 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
                           <Pencil size={11} />
                         </button>
                         <span className="text-xs text-gray-500 shrink-0">x{item.qty}</span>
-                        <span className="text-sm font-medium w-16 text-right shrink-0">
-                          {formatCurrency(item.price * item.qty)}
+                        <span className={cn('text-sm font-medium w-16 text-right shrink-0', item.isComp && 'text-emerald-600')}>
+                          {item.isComp ? 'İkram' : formatCurrency(item.price * item.qty)}
                         </span>
                       </div>
                       {editingNoteId === item.menuItemId && (
@@ -910,16 +975,32 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
                     </div>
                   ))}
                 </div>
-                <div className="flex items-center justify-between px-3 py-2.5 border-t">
-                  <span className="font-bold text-gray-900">{formatCurrency(cartTotal)}</span>
-                  <button
-                    onClick={submitOrder}
-                    disabled={submitting}
-                    className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"
-                  >
-                    <ShoppingCart size={14} />
-                    {submitting ? 'Gönderiliyor...' : 'Sipariş Ver'}
-                  </button>
+                <div className="px-3 py-2.5 border-t space-y-1.5">
+                  {!selectedTableOrder && cartDiscountAmount > 0 && (
+                    <>
+                      <div className="flex items-center justify-between text-xs text-gray-500">
+                        <span>Ara Toplam</span>
+                        <span>{formatCurrency(cartSubtotal)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-emerald-600 font-medium">
+                        <span>🎉 {cartDiscount?.campaignName}</span>
+                        <span>-{formatCurrency(cartDiscountAmount)}</span>
+                      </div>
+                    </>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-gray-900">
+                      {formatCurrency(selectedTableOrder ? cartSubtotal : cartFinalTotal)}
+                    </span>
+                    <button
+                      onClick={submitOrder}
+                      disabled={submitting}
+                      className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                    >
+                      <ShoppingCart size={14} />
+                      {submitting ? 'Gönderiliyor...' : 'Sipariş Ver'}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -977,12 +1058,25 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
                       {item.quantity}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{item.menu_item?.name ?? '?'}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-medium text-gray-900 truncate">{item.menu_item?.name ?? '?'}</p>
+                        {item.is_complimentary && (
+                          <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full shrink-0">İKRAM</span>
+                        )}
+                      </div>
                       {item.note && <p className="text-xs text-orange-500 truncate">Not: {item.note}</p>}
                     </div>
-                    <span className="text-sm text-gray-700 shrink-0">{formatCurrency(item.unit_price * item.quantity)}</span>
+                    <span className="text-sm text-gray-700 shrink-0">
+                      {item.is_complimentary ? 'İkram' : formatCurrency(item.unit_price * item.quantity)}
+                    </span>
                   </div>
                 ))}
+                {selectedTableOrder.discount_amount > 0 && (
+                  <div className="flex items-center justify-between px-4 py-2.5 text-sm text-emerald-600 bg-emerald-50">
+                    <span>Kampanya İndirimi</span>
+                    <span className="font-medium">-{formatCurrency(selectedTableOrder.discount_amount)}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
                   <span className="font-semibold text-gray-900">Toplam</span>
                   <span className="font-bold text-lg text-orange-600">{formatCurrency(selectedTableOrder.total_amount)}</span>

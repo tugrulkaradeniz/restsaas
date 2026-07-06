@@ -235,6 +235,7 @@ export interface OrderItem {
   note: string | null
   status: OrderItemStatus
   selected_options: SelectedOption[] | null
+  is_complimentary: boolean
   menu_item?: MenuItem
 }
 

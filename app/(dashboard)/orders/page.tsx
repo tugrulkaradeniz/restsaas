@@ -9,7 +9,7 @@ export default async function OrdersPage() {
   const tenantId = user.app_metadata?.tenant_id as string
   const service = createServiceClient()
 
-  const [{ data: orders }, { data: tables }, { data: categories }, { data: floorPlans }, { data: tenant }] = await Promise.all([
+  const [{ data: orders }, { data: tables }, { data: categories }, { data: floorPlans }, { data: tenant }, { data: campaigns }] = await Promise.all([
     supabase
       .from('orders')
       .select('*, table:tables(id,name), waiter:users(full_name), items:order_items(*, menu_item:menu_items(id,name,price))')
@@ -23,6 +23,7 @@ export default async function OrdersPage() {
       .order('sort_order'),
     supabase.from('floor_plans').select('*').order('name'),
     service.from('tenants').select('name, address').eq('id', tenantId).single(),
+    supabase.from('campaigns').select('*, items:campaign_items(*)').eq('is_active', true),
   ])
 
   return (
@@ -34,6 +35,7 @@ export default async function OrdersPage() {
       tables={tables ?? []}
       categories={categories ?? []}
       floorPlans={floorPlans ?? []}
+      campaigns={campaigns ?? []}
     />
   )
 }
