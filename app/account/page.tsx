@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { ArrowLeft, User, Mail, Package, MapPin, Plus, Trash2, Pencil, Star } from 'lucide-react'
+import { ArrowLeft, User, Mail, Package, MapPin, Plus, Trash2, Pencil, Star, Phone } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 import type { CustomerAddress } from '@/types/database'
 
-type Step = 'loading' | 'login' | 'otp' | 'profile'
+type Step = 'loading' | 'login' | 'otp' | 'google_phone' | 'profile'
 type Tab = 'orders' | 'addresses'
 
 type CustomerOrder = {
@@ -43,16 +44,60 @@ export default function AccountPage() {
   const [newAddr, setNewAddr] = useState({ label: '', address: '' })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editAddr, setEditAddr] = useState({ label: '', address: '' })
+  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null)
 
   useEffect(() => {
-    const lastPhone = localStorage.getItem('vc_last_phone')
-    if (!lastPhone) { setStep('login'); return }
-    const cachedToken = localStorage.getItem(`vc_token_${lastPhone}`)
-    if (!cachedToken) { setPhone(lastPhone); setStep('login'); return }
-    setPhone(lastPhone)
-    setToken(cachedToken)
-    loadProfile(lastPhone, cachedToken)
+    (async () => {
+      // Google ile giriş yapıp bu sayfaya yeni dönüldüyse önce onu ele al
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user?.email) {
+        const accessToken = session.access_token
+        const gEmail = session.user.email
+        const gName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || ''
+        // Bu oturumu personel/staff auth ile karıştırmamak için hemen kapat —
+        // sadece Google'ın email'i doğruladığını kanıtlamak için kullanıyoruz
+        await supabase.auth.signOut()
+        setEmail(gEmail)
+        setName(gName)
+        setGoogleAccessToken(accessToken)
+        setStep('google_phone')
+        return
+      }
+
+      const lastPhone = localStorage.getItem('vc_last_phone')
+      if (!lastPhone) { setStep('login'); return }
+      const cachedToken = localStorage.getItem(`vc_token_${lastPhone}`)
+      if (!cachedToken) { setPhone(lastPhone); setStep('login'); return }
+      setPhone(lastPhone)
+      setToken(cachedToken)
+      loadProfile(lastPhone, cachedToken)
+    })()
   }, [])
+
+  async function signInWithGoogle() {
+    const supabase = createClient()
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/account` },
+    })
+  }
+
+  async function completeGoogleLogin() {
+    if (!phone.trim() || !googleAccessToken) { toast.error('Telefon zorunlu'); return }
+    setBusy(true)
+    const res = await fetch('/api/customer/google-verify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessToken: googleAccessToken, phone, name }),
+    })
+    const data = await res.json()
+    setBusy(false)
+    if (!res.ok) { toast.error(data.error ?? 'Doğrulanamadı'); return }
+    localStorage.setItem(`vc_token_${phone}`, data.token)
+    localStorage.setItem('vc_last_phone', phone)
+    setToken(data.token)
+    await loadProfile(phone, data.token)
+  }
 
   async function loadProfile(p: string, t: string) {
     setStep('loading')
@@ -155,7 +200,7 @@ export default function AccountPage() {
     )
   }
 
-  if (step === 'login' || step === 'otp') {
+  if (step === 'login' || step === 'otp' || step === 'google_phone') {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="bg-orange-500 text-white px-4 pt-10 pb-6">
@@ -169,6 +214,23 @@ export default function AccountPage() {
         <div className="max-w-md mx-auto p-5">
           {step === 'login' ? (
             <div className="bg-white rounded-2xl border p-5 space-y-4">
+              <button
+                onClick={signInWithGoogle}
+                className="w-full flex items-center justify-center gap-2 border-2 border-gray-200 rounded-xl py-3 font-semibold text-sm text-gray-700 hover:border-gray-300"
+              >
+                <svg width="18" height="18" viewBox="0 0 48 48">
+                  <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.6 6 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"/>
+                  <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.6 18.9 12 24 12c3.1 0 5.8 1.1 8 3l6-6C34.6 6 29.6 4 24 4c-7.4 0-13.8 4.2-17.7 10.7z"/>
+                  <path fill="#4CAF50" d="M24 44c5.5 0 10.4-1.9 14.2-5.1l-6.6-5.4c-2 1.4-4.7 2.3-7.6 2.3-5.2 0-9.6-3.3-11.3-8l-6.6 5.1C9.9 39.6 16.4 44 24 44z"/>
+                  <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4.1 5.5l6.6 5.4C41.5 35.9 44 30.4 44 24c0-1.3-.1-2.7-.4-3.5z"/>
+                </svg>
+                Google ile Devam Et
+              </button>
+
+              <div className="flex items-center gap-3 text-xs text-gray-400">
+                <div className="flex-1 h-px bg-gray-200" /> veya <div className="flex-1 h-px bg-gray-200" />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Ad Soyad (opsiyonel)</label>
                 <input value={name} onChange={e => setName(e.target.value)} placeholder="Ahmet Yılmaz"
@@ -191,6 +253,22 @@ export default function AccountPage() {
               <p className="text-xs text-gray-400">
                 Daha önce sipariş verdiysen aynı telefon/e-posta ile giriş yapabilirsin.
               </p>
+            </div>
+          ) : step === 'google_phone' ? (
+            <div className="bg-white rounded-2xl border p-5 space-y-4">
+              <div className="bg-green-50 rounded-xl p-4 text-sm text-green-700">
+                <Mail size={16} className="inline mr-2" />
+                Google ile <strong>{email}</strong> doğrulandı. Teslimat için telefon numaranı da alalım.
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Telefon *</label>
+                <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="0532 123 45 67" type="tel" autoFocus
+                  className="w-full border rounded-xl px-4 py-2.5 text-sm" />
+              </div>
+              <button onClick={completeGoogleLogin} disabled={busy || !phone.trim()}
+                className="w-full bg-orange-500 text-white rounded-xl py-3 font-bold hover:bg-orange-600 disabled:opacity-50 flex items-center justify-center gap-2">
+                <Phone size={15} /> {busy ? 'Kaydediliyor...' : 'Devam Et'}
+              </button>
             </div>
           ) : (
             <div className="bg-white rounded-2xl border p-5 space-y-4">
