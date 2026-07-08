@@ -29,6 +29,7 @@ export default async function OrdersPage() {
   return (
     <OrdersView
       tenantId={tenantId}
+      currentUserId={user.id}
       tenantName={tenant?.name ?? ''}
       tenantAddress={tenant?.address ?? null}
       initialOrders={orders ?? []}

@@ -105,6 +105,43 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
     }
   }
 
+  // Personel satış raporu
+  const { data: staffList } = await service
+    .from('users')
+    .select('id, full_name, role')
+    .eq('tenant_id', tenantId)
+    .neq('role', 'super_admin')
+    .neq('role', 'kitchen')
+    .order('full_name')
+
+  const { data: waiterOrders } = await service
+    .from('orders')
+    .select('waiter_id, total_amount')
+    .eq('tenant_id', tenantId)
+    .eq('status', 'paid')
+    .gte('created_at', start)
+    .lt('created_at', end)
+
+  const staffSalesMap = new Map<string, { count: number; revenue: number }>()
+  let unattributedRevenue = 0
+  let unattributedCount = 0
+  for (const o of waiterOrders ?? []) {
+    if (!o.waiter_id) {
+      unattributedCount++
+      unattributedRevenue += o.total_amount ?? 0
+      continue
+    }
+    const existing = staffSalesMap.get(o.waiter_id) ?? { count: 0, revenue: 0 }
+    staffSalesMap.set(o.waiter_id, { count: existing.count + 1, revenue: existing.revenue + (o.total_amount ?? 0) })
+  }
+
+  const staffSales = (staffList ?? [])
+    .map(s => {
+      const agg = staffSalesMap.get(s.id) ?? { count: 0, revenue: 0 }
+      return { id: s.id, name: s.full_name, count: agg.count, revenue: agg.revenue }
+    })
+    .sort((a, b) => b.revenue - a.revenue)
+
   // Günlük ciro (sadece bu periyot)
   const dailyMap = new Map<string, number>()
   for (const o of orders) {
@@ -235,6 +272,48 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
             </div>
           )}
         </div>
+      </div>
+
+      {/* Personel satış raporu */}
+      <div className="bg-white rounded-xl border">
+        <div className="px-5 py-4 border-b">
+          <h2 className="font-semibold text-gray-900">Personel Satış Raporu</h2>
+          <p className="text-xs text-gray-500 mt-0.5">{label} — ödenen siparişler, garsona göre</p>
+        </div>
+        {staffSales.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-10">Personel yok</p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="text-xs text-gray-500 border-b">
+                <th className="px-5 py-2.5 text-left font-medium">Personel</th>
+                <th className="px-5 py-2.5 text-right font-medium">Sipariş</th>
+                <th className="px-5 py-2.5 text-right font-medium">Ciro</th>
+                <th className="px-5 py-2.5 text-right font-medium">Ort. Sipariş</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {staffSales.map(s => (
+                <tr key={s.id} className="hover:bg-gray-50">
+                  <td className="px-5 py-3 text-sm font-medium text-gray-900">{s.name}</td>
+                  <td className="px-5 py-3 text-sm text-gray-700 text-right">{fmtNum(s.count)}</td>
+                  <td className="px-5 py-3 text-sm font-medium text-gray-900 text-right">{fmt.format(s.revenue)}</td>
+                  <td className="px-5 py-3 text-sm text-gray-700 text-right">
+                    {s.count > 0 ? fmt.format(s.revenue / s.count) : '—'}
+                  </td>
+                </tr>
+              ))}
+              {unattributedCount > 0 && (
+                <tr className="bg-gray-50/50">
+                  <td className="px-5 py-3 text-sm text-gray-500 italic">Bilinmeyen / eski siparişler</td>
+                  <td className="px-5 py-3 text-sm text-gray-500 text-right">{fmtNum(unattributedCount)}</td>
+                  <td className="px-5 py-3 text-sm text-gray-500 text-right">{fmt.format(unattributedRevenue)}</td>
+                  <td className="px-5 py-3 text-sm text-gray-500 text-right">—</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   )

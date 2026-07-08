@@ -66,6 +66,7 @@ const ACTIVE_STATUSES = ['confirmed', 'preparing', 'ready', 'delivered']
 
 interface Props {
   tenantId: string
+  currentUserId: string
   tenantName: string
   tenantAddress?: string | null
   initialOrders: FullOrder[]
@@ -80,7 +81,7 @@ type PanelMode = 'none' | 'idle' | 'taking_order' | 'view_order'
 const TABLE_W = 80
 const TABLE_H = 60
 
-export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders, tables, categories, floorPlans, campaigns }: Props) {
+export function OrdersView({ tenantId, currentUserId, tenantName, tenantAddress, initialOrders, tables, categories, floorPlans, campaigns }: Props) {
   const [orders, setOrders] = useState<FullOrder[]>(initialOrders)
   const [localTables, setLocalTables] = useState<Table[]>(tables)
   const [mainView, setMainView] = useState<'floor' | 'online' | 'history'>('floor')
@@ -296,6 +297,7 @@ export function OrdersView({ tenantId, tenantName, tenantAddress, initialOrders,
       .insert({
         tenant_id: tenantId,
         table_id: selectedTableId,
+        waiter_id: currentUserId,
         source: 'waiter',
         status: 'confirmed',
         total_amount: cartFinalTotal,
