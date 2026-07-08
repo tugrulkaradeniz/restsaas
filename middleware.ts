@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { getTenantFromHost } from '@/lib/utils'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -27,13 +28,17 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const role = user?.app_metadata?.role as string | undefined
 
-  // Subdomain → tenant slug header'a yaz
+  // Subdomain → tenant slug header'a yaz + o restoranın sipariş sayfasına rewrite et
   const host = request.headers.get('host') || ''
-  const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN || 'localhost:3000'
-  const subdomain = host.replace(`.${appDomain}`, '')
-  const isTenantRequest = subdomain !== host && subdomain !== 'www'
-  if (isTenantRequest) {
-    supabaseResponse.headers.set('x-tenant-slug', subdomain)
+  const tenantSlug = getTenantFromHost(host)
+  if (tenantSlug && tenantSlug !== 'www') {
+    supabaseResponse.headers.set('x-tenant-slug', tenantSlug)
+
+    if (pathname === '/') {
+      const url = request.nextUrl.clone()
+      url.pathname = `/order/${tenantSlug}`
+      return NextResponse.rewrite(url)
+    }
   }
 
   const publicPaths = ['/login', '/register', '/admin/login', '/forgot-password', '/menu', '/order', '/account', '/rezervasyon']
