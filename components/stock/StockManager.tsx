@@ -5,23 +5,26 @@ import { cn } from '@/lib/utils'
 import { IngredientsTab } from './IngredientsTab'
 import { SuppliersTab } from './SuppliersTab'
 import { EntriesTab } from './EntriesTab'
+import { MovementsTab } from './MovementsTab'
 import type { Ingredient, Supplier } from '@/types/database'
-import type { StockEntry } from './types'
+import type { StockEntry, StockMovement } from './types'
 
 const TABS = [
   { key: 'ingredients', label: 'Malzemeler' },
   { key: 'suppliers',   label: 'Tedarikçiler' },
   { key: 'entries',     label: 'Faturalar' },
+  { key: 'movements',   label: 'Hareketler' },
 ]
 
 interface Props {
   initialIngredients: Ingredient[]
   initialSuppliers:   Supplier[]
   initialEntries:     StockEntry[]
+  initialMovements:   StockMovement[]
   tenantId:           string
 }
 
-export function StockManager({ initialIngredients, initialSuppliers, initialEntries, tenantId }: Props) {
+export function StockManager({ initialIngredients, initialSuppliers, initialEntries, initialMovements, tenantId }: Props) {
   const [tab, setTab] = useState('entries')
   const [ingredients, setIngredients] = useState<Ingredient[]>(initialIngredients)
   const [suppliers, setSuppliers]     = useState<Supplier[]>(initialSuppliers)
@@ -67,6 +70,9 @@ export function StockManager({ initialIngredients, initialSuppliers, initialEntr
           ingredients={ingredients}
           suppliers={suppliers}
         />
+      )}
+      {tab === 'movements' && (
+        <MovementsTab movements={initialMovements} />
       )}
     </div>
   )

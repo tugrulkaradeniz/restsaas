@@ -10,6 +10,9 @@ export async function POST(req: Request) {
 
     const service = createServiceClient()
 
+    const { data: order } = await service.from('orders').select('tenant_id').eq('id', orderId).single()
+    if (!order) return NextResponse.json({ ok: true })
+
     // Sipariş kalemlerini al
     const { data: items } = await service
       .from('order_items')
@@ -46,10 +49,19 @@ export async function POST(req: Request) {
         .single()
 
       if (ing) {
+        const resultingQty = round2((ing.stock_qty ?? 0) - qty)
         await service
           .from('ingredients')
-          .update({ stock_qty: round2((ing.stock_qty ?? 0) - qty) })
+          .update({ stock_qty: resultingQty })
           .eq('id', ingredientId)
+        await service.from('stock_movements').insert({
+          tenant_id: order.tenant_id,
+          ingredient_id: ingredientId,
+          type: 'order',
+          quantity_change: -qty,
+          resulting_qty: resultingQty,
+          order_id: orderId,
+        })
       }
     }
 

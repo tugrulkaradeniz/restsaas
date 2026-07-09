@@ -85,10 +85,19 @@ export async function POST(req: NextRequest) {
       const unitCostExcl = item.kdv_included
         ? round2(item.unit_cost / (1 + item.kdv_rate / 100))
         : item.unit_cost
+      const resultingQty = round2((ing.stock_qty ?? 0) + item.quantity)
       await service.from('ingredients').update({
-        stock_qty: round2((ing.stock_qty ?? 0) + item.quantity),
+        stock_qty: resultingQty,
         unit_cost: unitCostExcl,
       }).eq('id', item.ingredient_id)
+      await service.from('stock_movements').insert({
+        tenant_id: tenantId,
+        ingredient_id: item.ingredient_id,
+        type: 'purchase',
+        quantity_change: item.quantity,
+        resulting_qty: resultingQty,
+        entry_id: entry.id,
+      })
     }
   }
 

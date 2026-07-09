@@ -54,9 +54,18 @@ export function IngredientsTab({ ingredients, setIngredients, tenantId }: Props)
     }
 
     if (editId) {
-      const { error } = await supabase.from('ingredients').update(payload).eq('id', editId)
+      const original = ingredients.find((i) => i.id === editId)
+      const { stock_qty, ...metaPayload } = payload
+      const { error } = await supabase.from('ingredients').update(metaPayload).eq('id', editId)
       if (error) { toast.error(error.message); setSaving(false); return }
-      setIngredients((prev) => prev.map((i) => i.id === editId ? { ...i, ...payload } : i))
+      if (original && stock_qty !== original.stock_qty) {
+        const res = await fetch('/api/stock/adjust', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ingredientId: editId, newQty: stock_qty, note: 'Manuel düzenleme' }),
+        })
+        if (!res.ok) { toast.error('Stok miktarı güncellenemedi'); setSaving(false); return }
+      }
+      setIngredients((prev) => prev.map((i) => i.id === editId ? { ...i, ...metaPayload, stock_qty } : i))
       toast.success('Güncellendi')
     } else {
       const { data, error } = await supabase.from('ingredients')

@@ -15,6 +15,7 @@ export default async function StockPage() {
     { data: ingredients },
     { data: suppliers },
     { data: entries },
+    { data: movements },
   ] = await Promise.all([
     service.from('ingredients').select('*').eq('tenant_id', tenantId).order('name'),
     service.from('suppliers').select('*').eq('tenant_id', tenantId).order('name'),
@@ -23,6 +24,11 @@ export default async function StockPage() {
       .eq('tenant_id', tenantId)
       .order('invoice_date', { ascending: false })
       .limit(100),
+    service.from('stock_movements')
+      .select('*, ingredient:ingredients(name,unit)')
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false })
+      .limit(200),
   ])
 
   return (
@@ -32,6 +38,7 @@ export default async function StockPage() {
         initialIngredients={ingredients ?? []}
         initialSuppliers={suppliers ?? []}
         initialEntries={entries ?? []}
+        initialMovements={movements ?? []}
         tenantId={tenantId}
       />
     </div>

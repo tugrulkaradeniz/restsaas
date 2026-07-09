@@ -40,3 +40,20 @@ export interface StockEntry {
   supplier?: { name: string } | null
   items?: StockEntryItem[]
 }
+
+export type StockMovementType = 'order' | 'purchase' | 'adjustment'
+
+export interface StockMovement {
+  id: string
+  tenant_id: string
+  ingredient_id: string
+  type: StockMovementType
+  quantity_change: number
+  resulting_qty: number
+  order_id: string | null
+  entry_id: string | null
+  note: string | null
+  created_by: string | null
+  created_at: string
+  ingredient?: { name: string; unit: string } | null
+}
