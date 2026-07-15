@@ -5,6 +5,14 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { TrendingUp, ShoppingBag, Receipt, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
+import ShiftReportPrintButton from '@/components/reports/ShiftReportPrintButton'
+import type { ShiftReportParams } from '@/lib/print'
+
+const PAYMENT_LABEL: Record<string, string> = {
+  cash: 'Nakit',
+  card: 'Kredi Kartı',
+  pos:  'POS / QR',
+}
 
 type Period = 'today' | 'week' | 'month' | 'last_month'
 
@@ -60,7 +68,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
   // Ödenen siparişler
   const { data: paidOrders } = await service
     .from('orders')
-    .select('id, total_amount, created_at')
+    .select('id, total_amount, discount_amount, payment_method, created_at')
     .eq('tenant_id', tenantId)
     .eq('status', 'paid')
     .gte('created_at', start)
@@ -70,6 +78,39 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
   const revenue = orders.reduce((s, o) => s + (o.total_amount ?? 0), 0)
   const orderCount = orders.length
   const avgOrder = orderCount > 0 ? revenue / orderCount : 0
+
+  // Gün sonu — ödeme yöntemi dağılımı
+  const { data: tenant } = await service
+    .from('tenants')
+    .select('name')
+    .eq('id', tenantId)
+    .single()
+
+  const discountTotal = orders.reduce((s, o) => s + (o.discount_amount ?? 0), 0)
+  const netRevenue = revenue
+  const grossRevenue = revenue + discountTotal
+
+  const paymentMap = new Map<string, { count: number; amount: number }>()
+  for (const o of orders) {
+    const key = o.payment_method ?? 'unknown'
+    const existing = paymentMap.get(key) ?? { count: 0, amount: 0 }
+    paymentMap.set(key, { count: existing.count + 1, amount: existing.amount + (o.total_amount ?? 0) })
+  }
+  const paymentBreakdown = Array.from(paymentMap.entries())
+    .map(([method, v]) => ({ method, ...v }))
+    .sort((a, b) => b.amount - a.amount)
+
+  const shiftReport: ShiftReportParams = {
+    tenantName: tenant?.name ?? '',
+    periodLabel: label,
+    rangeStart: start,
+    rangeEnd: end,
+    orderCount,
+    grossRevenue,
+    discountTotal,
+    netRevenue,
+    paymentBreakdown,
+  }
 
   // Tüm sipariş sayısı (iptal dahil)
   const { count: totalOrderCount } = await service
@@ -272,6 +313,57 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
             </div>
           )}
         </div>
+      </div>
+
+      {/* Gün Sonu — ödeme yöntemi dağılımı */}
+      <div className="bg-white rounded-xl border">
+        <div className="px-5 py-4 border-b flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-gray-900">Gün Sonu Özeti</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{label} — ödenen siparişler, ödeme yöntemine göre</p>
+          </div>
+          <ShiftReportPrintButton report={shiftReport} />
+        </div>
+        <div className="grid grid-cols-3 gap-4 px-5 py-4 border-b">
+          <div>
+            <p className="text-xs text-gray-500">Brüt Ciro</p>
+            <p className="text-lg font-semibold text-gray-900 mt-0.5">{fmt.format(grossRevenue)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">İndirim</p>
+            <p className="text-lg font-semibold text-gray-900 mt-0.5">
+              {discountTotal > 0 ? `-${fmt.format(discountTotal)}` : fmt.format(0)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Net Ciro</p>
+            <p className="text-lg font-semibold text-gray-900 mt-0.5">{fmt.format(netRevenue)}</p>
+          </div>
+        </div>
+        {paymentBreakdown.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-10">Veri yok</p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="text-xs text-gray-500 border-b">
+                <th className="px-5 py-2.5 text-left font-medium">Ödeme Yöntemi</th>
+                <th className="px-5 py-2.5 text-right font-medium">Sipariş</th>
+                <th className="px-5 py-2.5 text-right font-medium">Tutar</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {paymentBreakdown.map(pb => (
+                <tr key={pb.method} className="hover:bg-gray-50">
+                  <td className="px-5 py-3 text-sm font-medium text-gray-900">
+                    {pb.method === 'unknown' ? 'Belirtilmemiş' : (PAYMENT_LABEL[pb.method] ?? pb.method)}
+                  </td>
+                  <td className="px-5 py-3 text-sm text-gray-700 text-right">{fmtNum(pb.count)}</td>
+                  <td className="px-5 py-3 text-sm font-medium text-gray-900 text-right">{fmt.format(pb.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Personel satış raporu */}

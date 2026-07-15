@@ -233,6 +233,99 @@ export function generateKitchenHTML(p: KitchenTicketParams, s: PrintSettings): s
 </body></html>`
 }
 
+// ─── Gün Sonu Raporu ────────────────────────────────────────────────────────
+
+export interface ShiftReportPaymentBreakdown {
+  method: string
+  count: number
+  amount: number
+}
+
+export interface ShiftReportParams {
+  tenantName:       string
+  periodLabel:      string
+  rangeStart:       string
+  rangeEnd:         string
+  orderCount:       number
+  grossRevenue:     number
+  discountTotal:    number
+  netRevenue:       number
+  paymentBreakdown: ShiftReportPaymentBreakdown[]
+}
+
+export function generateShiftReportHTML(p: ShiftReportParams, s: PrintSettings): string {
+  const paper = PAPER[s.receiptWidth]
+  const fs    = s.receiptWidth === '58mm' ? 11 : 12
+
+  const rangeStr = (iso: string) => new Date(iso).toLocaleString('tr-TR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+  const generatedStr = new Date().toLocaleString('tr-TR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+
+  const paymentRows = p.paymentBreakdown.map(pb => `
+    <div class="row">
+      <span>${esc(PAYMENT_LABEL[pb.method] ?? pb.method)} (${pb.count})</span>
+      <span>${fmt(pb.amount)}</span>
+    </div>
+  `).join('')
+
+  return `<!DOCTYPE html><html lang="tr"><head>
+  <meta charset="utf-8">
+  <title>Gün Sonu Raporu</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: ${fs}px;
+      color: #000;
+      background: #fff;
+      padding: 10px 12px;
+      width: ${paper.px}px;
+    }
+    .center  { text-align: center; }
+    .bold    { font-weight: bold; }
+    .lg      { font-size: ${fs + 3}px; }
+    .xl      { font-size: ${fs + 6}px; }
+    .dashed  { border-top: 1px dashed #000; margin: 7px 0; }
+    .solid   { border-top: 2px solid #000; margin: 7px 0; }
+    .row     { display: flex; justify-content: space-between; align-items: baseline; margin: 3px 0; }
+    @media print {
+      body { width: 100%; padding: 0 6px; }
+      @page { size: ${paper.page}; margin: 2mm; }
+    }
+  </style>
+</head><body>
+  <div class="center bold lg">${esc(p.tenantName)}</div>
+  <div class="center bold" style="margin-top:2px">GÜN SONU RAPORU</div>
+  <div class="center" style="margin-top:2px">${esc(p.periodLabel)}</div>
+  <div class="dashed"></div>
+
+  <div class="row"><span>Başlangıç</span><span>${rangeStr(p.rangeStart)}</span></div>
+  <div class="row"><span>Bitiş</span><span>${rangeStr(p.rangeEnd)}</span></div>
+  <div class="row"><span>Sipariş Sayısı</span><span>${p.orderCount}</span></div>
+  <div class="dashed"></div>
+
+  <div class="row"><span>Brüt Ciro</span><span>${fmt(p.grossRevenue)}</span></div>
+  ${p.discountTotal > 0 ? `<div class="row"><span>İndirim</span><span>-${fmt(p.discountTotal)}</span></div>` : ''}
+  <div class="row bold">
+    <span>NET CİRO</span>
+    <span>${fmt(p.netRevenue)}</span>
+  </div>
+  <div class="solid"></div>
+
+  <div class="bold" style="margin-bottom:3px">Ödeme Yöntemi Dağılımı</div>
+  ${paymentRows || '<div class="row"><span>Veri yok</span></div>'}
+  <div class="dashed"></div>
+
+  <div class="center" style="font-size:${fs - 2}px;margin-top:6px">Rapor tarihi: ${generatedStr}</div>
+  <br><br>
+</body></html>`
+}
+
 // ─── Public print functions (auto-load settings) ──────────────────────────────
 
 function openPrint(html: string) {
@@ -259,4 +352,9 @@ export function printReceipt(p: ReceiptParams, settingsOverride?: Partial<PrintS
 export function printKitchenTicket(p: KitchenTicketParams, settingsOverride?: Partial<PrintSettings>) {
   const s = { ...loadPrintSettings(), ...settingsOverride }
   openPrint(generateKitchenHTML(p, s))
+}
+
+export function printShiftReport(p: ShiftReportParams, settingsOverride?: Partial<PrintSettings>) {
+  const s = { ...loadPrintSettings(), ...settingsOverride }
+  openPrint(generateShiftReportHTML(p, s))
 }
