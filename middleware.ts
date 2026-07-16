@@ -42,14 +42,14 @@ export async function middleware(request: NextRequest) {
   }
 
   const publicPaths = ['/login', '/register', '/admin/login', '/forgot-password', '/menu', '/order', '/account', '/rezervasyon']
-  const isPublicPath = publicPaths.some((p) => pathname.startsWith(p))
+  const isPublicPath = pathname === '/' || publicPaths.some((p) => pathname.startsWith(p))
   const isApiWebhook = pathname.startsWith('/api/webhooks')
   const isApiRoute = pathname.startsWith('/api/')
 
-  // Giriş yapılmamış → ana sayfa müşteri marketplace'ine, diğer korumalı sayfalar login'e yönlensin
+  // Giriş yapılmamış → ana sayfa tanıtım sayfasını, diğer korumalı sayfalar login'i göstersin
   if (!user && !isPublicPath && !isApiWebhook && !isApiRoute) {
     const url = request.nextUrl.clone()
-    url.pathname = pathname === '/' ? '/order' : '/login'
+    url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
