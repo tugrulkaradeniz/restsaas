@@ -5,8 +5,9 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { Order, OrderItem, MenuItem, Table } from '@/types/database'
-import { CheckCircle, Clock, Volume2, Printer } from 'lucide-react'
+import { CheckCircle, Clock, Volume2, Printer, ChefHat, Bell, PrinterCheck } from 'lucide-react'
 import { printKitchenTicket } from '@/lib/print'
+import { HelpButton } from '@/components/help/HelpButton'
 
 type KitchenOrder = Order & {
   table: Pick<Table, 'name'> | null
@@ -179,9 +180,22 @@ export function KitchenDisplay({ initialOrders }: Props) {
     <div className="min-h-screen bg-gray-950 text-white p-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Mutfak Ekranı</h1>
-          <p className="text-gray-400 text-sm">{orders.length} aktif sipariş</p>
+        <div className="flex items-center gap-2">
+          <div>
+            <h1 className="text-2xl font-bold">Mutfak Ekranı</h1>
+            <p className="text-gray-400 text-sm">{orders.length} aktif sipariş</p>
+          </div>
+          <HelpButton
+            title="Mutfak Ekranı"
+            intro="Onaylanan siparişleri mutfağa gösterir, hazır olunca işaretlemenizi sağlar."
+            steps={[
+              { icon: ChefHat, title: 'Sipariş kartları', description: 'Onaylanan/hazırlanan siparişler burada masa ve ürünleriyle listelenir, geçen süre kart üzerinde görünür.' },
+              { icon: CheckCircle, title: 'Hazır işaretleyin', description: 'Ürün/sipariş hazır olunca işaretleyin — garson ekranına ve masaya anında "Hazır" bildirimi gider.' },
+              { icon: Bell, title: 'Ses uyarısı', description: 'Yeni sipariş geldiğinde sesli uyarı çalar; sağ üstteki Ses butonuyla açıp kapatabilirsiniz.' },
+              { icon: PrinterCheck, title: 'Oto-Baskı', description: 'Açıksa yeni gelen her sipariş otomatik olarak mutfak yazıcısından basılır.' },
+            ]}
+            buttonClassName="bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-orange-400"
+          />
         </div>
         <div className="flex items-center gap-2">
           <button

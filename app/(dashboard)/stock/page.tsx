@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { StockManager } from '@/components/stock/StockManager'
+import { StockHelp } from '@/components/help/pages/StockHelp'
 
 export default async function StockPage() {
   const supabase = await createClient()
@@ -33,7 +34,10 @@ export default async function StockPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Stok & Muhasebe</h1>
+      <div className="flex items-center gap-2 mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Stok & Muhasebe</h1>
+        <StockHelp />
+      </div>
       <StockManager
         initialIngredients={ingredients ?? []}
         initialSuppliers={suppliers ?? []}

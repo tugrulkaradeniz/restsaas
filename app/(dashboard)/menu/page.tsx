@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { MenuManager } from '@/components/menu/MenuManager'
+import { MenuHelp } from '@/components/help/pages/MenuHelp'
 
 export default async function MenuPage() {
   const supabase = await createClient()
@@ -20,7 +21,10 @@ export default async function MenuPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Menü Yönetimi</h1>
+      <div className="flex items-center gap-2 mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Menü Yönetimi</h1>
+        <MenuHelp />
+      </div>
       <MenuManager
         tenantId={tenantId}
         initialCategories={categories ?? []}

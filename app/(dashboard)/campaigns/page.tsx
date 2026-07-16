@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { CampaignsManager } from '@/components/campaigns/CampaignsManager'
+import { CampaignsHelp } from '@/components/help/pages/CampaignsHelp'
 
 export default async function CampaignsPage() {
   const supabase = await createClient()
@@ -33,7 +34,10 @@ export default async function CampaignsPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Kampanyalar</h1>
+      <div className="flex items-center gap-2 mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Kampanyalar</h1>
+        <CampaignsHelp />
+      </div>
       <CampaignsManager
         initialCampaigns={(campaigns ?? []) as Parameters<typeof CampaignsManager>[0]['initialCampaigns']}
         menuItems={menuItems ?? []}

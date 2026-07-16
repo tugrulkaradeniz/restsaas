@@ -1,6 +1,7 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { ReservationsManager } from '@/components/reservations/ReservationsManager'
+import { ReservationsHelp } from '@/components/help/pages/ReservationsHelp'
 
 export default async function ReservationsPage() {
   const supabase = await createClient()
@@ -33,8 +34,9 @@ export default async function ReservationsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="px-6 py-4 border-b bg-white">
+      <div className="px-6 py-4 border-b bg-white flex items-center gap-2">
         <h1 className="text-2xl font-bold text-gray-900">Rezervasyonlar</h1>
+        <ReservationsHelp />
       </div>
       <div className="flex-1 overflow-hidden">
         <ReservationsManager

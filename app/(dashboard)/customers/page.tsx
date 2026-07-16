@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { CustomersManager } from '@/components/customers/CustomersManager'
+import { CustomersHelp } from '@/components/help/pages/CustomersHelp'
 
 export default async function CustomersPage() {
   const supabase = await createClient()
@@ -21,7 +22,10 @@ export default async function CustomersPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Müşteri & Sadakat</h1>
+      <div className="flex items-center gap-2 mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Müşteri & Sadakat</h1>
+        <CustomersHelp />
+      </div>
       <CustomersManager
         tenantId={tenantId}
         initialCustomers={customers ?? []}

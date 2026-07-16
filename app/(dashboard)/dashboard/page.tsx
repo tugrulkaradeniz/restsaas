@@ -4,9 +4,10 @@ import { formatCurrency } from '@/lib/utils'
 import { redirect } from 'next/navigation'
 import {
   TrendingUp, ShoppingBag, Clock, CalendarDays,
-  AlertTriangle, BellRing, ChefHat, CheckCircle2
+  AlertTriangle, BellRing, ChefHat, CheckCircle2,
 } from 'lucide-react'
 import Link from 'next/link'
+import { DashboardHelp } from '@/components/help/pages/DashboardHelp'
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Bekliyor', confirmed: 'Onaylandı', preparing: 'Hazırlanıyor',
@@ -141,7 +142,10 @@ export default async function DashboardPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Genel Bakış</h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-gray-900">Genel Bakış</h1>
+        <DashboardHelp />
+      </div>
 
       {/* KPI kartları */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">

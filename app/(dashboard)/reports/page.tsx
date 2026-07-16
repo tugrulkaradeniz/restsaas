@@ -7,6 +7,7 @@ import { TrendingUp, ShoppingBag, Receipt, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import ShiftReportPrintButton from '@/components/reports/ShiftReportPrintButton'
 import type { ShiftReportParams } from '@/lib/print'
+import { ReportsHelp } from '@/components/help/pages/ReportsHelp'
 
 const PAYMENT_LABEL: Record<string, string> = {
   cash: 'Nakit',
@@ -226,7 +227,10 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
     <div className="p-6 space-y-6">
       {/* Başlık + periyot seçici */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Raporlar</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-gray-900">Raporlar</h1>
+          <ReportsHelp />
+        </div>
         <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
           {PERIODS.map(p => (
             <Link

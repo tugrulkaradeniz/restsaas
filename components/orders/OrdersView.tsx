@@ -17,6 +17,7 @@ import { printReceipt, printKitchenTicket } from '@/lib/print'
 import { computeBestCampaignDiscount } from '@/lib/campaigns'
 import type { Campaign } from '@/components/campaigns/types'
 import { HistoryPanel } from './HistoryPanel'
+import { HelpButton } from '@/components/help/HelpButton'
 
 type FullOrder = Order & {
   table: Pick<Table, 'id' | 'name'> | null
@@ -511,6 +512,20 @@ export function OrdersView({ tenantId, currentUserId, tenantName, tenantAddress,
         >
           <History size={14} /> Geçmiş
         </button>
+        <div className="ml-auto">
+          <HelpButton
+            title="Siparişler (POS)"
+            intro="Ana sipariş ekranı — masaya sipariş alma, online siparişleri karşılama ve geçmişe bakma."
+            steps={[
+              { icon: LayoutGrid, title: 'Masa Planı', description: 'Bir masaya tıklayıp sipariş açın, ürün ekleyin, ikram işaretleyin ve ödeme alın. Masa renkleri anlık durumu gösterir.' },
+              { icon: ShoppingCart, title: 'İlave sipariş', description: 'Zaten siparişi olan bir masaya tıklayıp "İlave Sipariş Ekle" ile yeni ürün ekleyebilirsiniz.' },
+              { icon: ArrowRightLeft, title: 'Masa Değiştir / Birleştir', description: 'Sipariş panelindeki butonlarla müşteri masa değiştirirse siparişi başka boş masaya taşıyın, ya da iki masayı tek hesapta birleştirin.' },
+              { icon: Globe, title: 'Online Siparişler', description: 'Web/mobil üzerinden gelen paket/teslimat siparişleri mor sekmede sırayla görünür, durumunu buradan güncellersiniz.' },
+              { icon: CreditCard, title: 'Hesap Al', description: 'Nakit/Kart/POS seçip ödeme alın — masa otomatik "kirli" olur, temizlendiğinde tekrar boşa döner.' },
+            ]}
+            tips={['Geçmiş sekmesinden tarih/duruma göre filtreleyip eski siparişlerin adisyonunu tekrar yazdırabilirsiniz.']}
+          />
+        </div>
       </div>
 
       {mainView === 'history' && (

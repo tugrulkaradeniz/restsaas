@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { StaffManager } from '@/components/staff/StaffManager'
+import { StaffHelp } from '@/components/help/pages/StaffHelp'
 
 export default async function StaffPage() {
   const supabase = await createClient()
@@ -26,7 +27,10 @@ export default async function StaffPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Personel Yönetimi</h1>
+      <div className="flex items-center gap-2 mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Personel Yönetimi</h1>
+        <StaffHelp />
+      </div>
       <StaffManager
         initialStaff={staff ?? []}
         currentUserId={user.id}

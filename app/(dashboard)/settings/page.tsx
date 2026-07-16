@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { SettingsForm } from '@/components/settings/SettingsForm'
 import { PrintSettingsForm } from '@/components/settings/PrintSettingsForm'
 import { OnlineOrderSettings } from '@/components/settings/OnlineOrderSettings'
+import { BusinessSettingsHelp, PrintSettingsHelp, OnlineOrderSettingsHelp } from '@/components/help/pages/SettingsHelp'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -21,16 +22,25 @@ export default async function SettingsPage() {
   return (
     <div className="p-6 max-w-3xl space-y-10">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">İşletme Ayarları</h1>
+        <div className="flex items-center gap-2 mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">İşletme Ayarları</h1>
+          <BusinessSettingsHelp />
+        </div>
         <SettingsForm tenant={tenant ?? null} />
       </div>
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Baskı & Yazıcı</h1>
+        <div className="flex items-center gap-2 mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Baskı & Yazıcı</h1>
+          <PrintSettingsHelp />
+        </div>
         <PrintSettingsForm />
       </div>
       {tenant && (
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">Online Sipariş</h1>
+          <div className="flex items-center gap-2 mb-6">
+            <h1 className="text-2xl font-bold text-gray-900">Online Sipariş</h1>
+            <OnlineOrderSettingsHelp />
+          </div>
           <OnlineOrderSettings
             tenant={tenant}
             cuisineTypes={cuisineTypes ?? []}
