@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { Printer } from 'lucide-react'
 import {
   type PrintSettings,
   DEFAULT_SETTINGS,
@@ -10,6 +11,8 @@ import {
   savePrintSettings,
   generateReceiptHTML,
   generateKitchenHTML,
+  printReceipt,
+  printKitchenTicket,
 } from '@/lib/print'
 
 // ─── Sample data for preview ─────────────────────────────────────────────────
@@ -181,6 +184,15 @@ export function PrintSettingsForm() {
     setTimeout(() => setSaved(false), 2000)
   }
 
+  function handleTestPrint() {
+    if (activeTab === 'receipt') {
+      printReceipt(SAMPLE_RECEIPT_PARAMS, settings)
+    } else {
+      printKitchenTicket(SAMPLE_KITCHEN_PARAMS, settings)
+    }
+    toast.success('Test fişi yazdırma penceresi açıldı')
+  }
+
   const receiptHtml = generateReceiptHTML(SAMPLE_RECEIPT_PARAMS, settings)
   const kitchenHtml = generateKitchenHTML(SAMPLE_KITCHEN_PARAMS, settings)
 
@@ -299,18 +311,26 @@ export function PrintSettingsForm() {
             </>
           )}
 
-          {/* Save */}
-          <button
-            onClick={handleSave}
-            className={cn(
-              'w-full py-2.5 rounded-lg font-medium text-sm transition-colors',
-              saved
-                ? 'bg-green-500 text-white'
-                : 'bg-orange-500 hover:bg-orange-600 text-white'
-            )}
-          >
-            {saved ? '✓ Kaydedildi' : 'Kaydet'}
-          </button>
+          {/* Save + Test print */}
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              className={cn(
+                'flex-1 py-2.5 rounded-lg font-medium text-sm transition-colors',
+                saved
+                  ? 'bg-green-500 text-white'
+                  : 'bg-orange-500 hover:bg-orange-600 text-white'
+              )}
+            >
+              {saved ? '✓ Kaydedildi' : 'Kaydet'}
+            </button>
+            <button
+              onClick={handleTestPrint}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium text-sm border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <Printer size={16} /> Test Yazdır
+            </button>
+          </div>
 
           <p className="text-xs text-gray-400 text-center -mt-2">
             Ayarlar bu tarayıcıda saklanır. Her değişiklikte önizleme anında güncellenir.

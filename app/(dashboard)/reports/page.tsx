@@ -120,31 +120,51 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
     .gte('created_at', start)
     .lt('created_at', end)
 
-  // En çok satan ürünler
+  // En çok satan ürünler + KDV kırılımı
   let topItems: { name: string; qty: number; revenue: number }[] = []
+  let kdvBreakdown: { rate: number; gross: number; net: number; kdvAmount: number }[] = []
   if (orders.length > 0) {
     const orderIds = orders.map(o => o.id)
     const { data: items } = await service
       .from('order_items')
-      .select('menu_item_id, quantity, unit_price, menu_item:menu_items(name)')
+      .select('menu_item_id, quantity, unit_price, menu_item:menu_items(name, kdv_rate, kdv_included)')
       .in('order_id', orderIds)
 
     if (items) {
       const map = new Map<string, { name: string; qty: number; revenue: number }>()
+      const kdvMap = new Map<number, { gross: number; net: number; kdvAmount: number }>()
       for (const item of items) {
-        const name = (item.menu_item as unknown as { name: string } | null)?.name ?? 'Bilinmeyen'
+        const menuItem = item.menu_item as unknown as { name: string; kdv_rate: number | null; kdv_included: boolean | null } | null
+        const name = menuItem?.name ?? 'Bilinmeyen'
+        const lineTotal = item.quantity * item.unit_price
         const existing = map.get(item.menu_item_id) ?? { name, qty: 0, revenue: 0 }
         map.set(item.menu_item_id, {
           name,
           qty: existing.qty + item.quantity,
-          revenue: existing.revenue + item.quantity * item.unit_price,
+          revenue: existing.revenue + lineTotal,
+        })
+
+        const rate = menuItem?.kdv_rate ?? 10
+        const included = menuItem?.kdv_included ?? true
+        const net = included ? lineTotal / (1 + rate / 100) : lineTotal
+        const kdvAmount = included ? lineTotal - net : lineTotal * (rate / 100)
+        const gross = included ? lineTotal : lineTotal + kdvAmount
+        const kExisting = kdvMap.get(rate) ?? { gross: 0, net: 0, kdvAmount: 0 }
+        kdvMap.set(rate, {
+          gross: kExisting.gross + gross,
+          net: kExisting.net + net,
+          kdvAmount: kExisting.kdvAmount + kdvAmount,
         })
       }
       topItems = Array.from(map.values())
         .sort((a, b) => b.qty - a.qty)
         .slice(0, 10)
+      kdvBreakdown = Array.from(kdvMap.entries())
+        .map(([rate, v]) => ({ rate, ...v }))
+        .sort((a, b) => b.rate - a.rate)
     }
   }
+  const totalKdvAmount = kdvBreakdown.reduce((s, k) => s + k.kdvAmount, 0)
 
   // Personel satış raporu
   const { data: staffList } = await service
@@ -403,6 +423,43 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
                   <td className="px-5 py-3 text-sm text-gray-500 text-right">—</td>
                 </tr>
               )}
+            </tbody>
+          </table>
+        )}
+      </div>
+      {/* KDV raporu */}
+      <div className="bg-white rounded-xl border">
+        <div className="px-5 py-4 border-b flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-gray-900">KDV Raporu</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{label} — ödenen siparişler, oran bazında</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-gray-500">Toplam Tahsil Edilen KDV</p>
+            <p className="text-lg font-bold text-gray-900">{fmt.format(totalKdvAmount)}</p>
+          </div>
+        </div>
+        {kdvBreakdown.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-10">Veri yok</p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="text-xs text-gray-500 border-b">
+                <th className="px-5 py-2.5 text-left font-medium">KDV Oranı</th>
+                <th className="px-5 py-2.5 text-right font-medium">KDV Hariç Tutar</th>
+                <th className="px-5 py-2.5 text-right font-medium">KDV Tutarı</th>
+                <th className="px-5 py-2.5 text-right font-medium">KDV Dahil Tutar</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {kdvBreakdown.map(k => (
+                <tr key={k.rate} className="hover:bg-gray-50">
+                  <td className="px-5 py-3 text-sm font-medium text-gray-900">%{k.rate}</td>
+                  <td className="px-5 py-3 text-sm text-gray-700 text-right">{fmt.format(k.net)}</td>
+                  <td className="px-5 py-3 text-sm text-gray-700 text-right">{fmt.format(k.kdvAmount)}</td>
+                  <td className="px-5 py-3 text-sm font-medium text-gray-900 text-right">{fmt.format(k.gross)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}

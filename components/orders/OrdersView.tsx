@@ -9,7 +9,7 @@ import type {
   Order, Table, MenuCategory, MenuItem, OrderItem,
   OrderStatus, FloorPlan, FloorPlanTable, TableStatus,
 } from '@/types/database'
-import { Plus, Minus, ShoppingCart, Pencil, X, CreditCard, Banknote, Smartphone, LayoutGrid, Printer, BellRing, Check, Globe, MapPin, Phone, ChevronRight, Package, Gift, History, Sparkles } from 'lucide-react'
+import { Plus, Minus, ShoppingCart, Pencil, X, CreditCard, Banknote, Smartphone, LayoutGrid, Printer, BellRing, Check, Globe, MapPin, Phone, ChevronRight, Package, Gift, History, Sparkles, ArrowRightLeft, Combine } from 'lucide-react'
 import type { WaiterCall } from '@/types/database'
 
 type PendingCall = WaiterCall & { tableName: string }
@@ -97,6 +97,7 @@ export function OrdersView({ tenantId, currentUserId, tenantName, tenantAddress,
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [confirmPaymentId, setConfirmPaymentId] = useState<string | null>(null)
+  const [transferAction, setTransferAction] = useState<'move' | 'merge' | null>(null)
   const supabase = createClient()
 
   const activePlan = floorPlans[activePlanIdx]
@@ -120,6 +121,10 @@ export function OrdersView({ tenantId, currentUserId, tenantName, tenantAddress,
   const selectedTableOrder = selectedTableId
     ? orders.find(o => o.table_id === selectedTableId && ACTIVE_STATUSES.includes(o.status))
     : undefined
+
+  // Masa değiştirme hedefi: boş masalar / Masa birleştirme hedefi: siparişli diğer masalar
+  const emptyTargetTables = localTables.filter(t => t.id !== selectedTableId && getTableStatus(t.id) === 'empty')
+  const mergeTargetTables = localTables.filter(t => t.id !== selectedTableId && occupiedTableIds.has(t.id))
 
   // Realtime subscriptions
   useEffect(() => {
@@ -381,6 +386,64 @@ export function OrdersView({ tenantId, currentUserId, tenantName, tenantAddress,
         paymentMethod: method,
       })
     }
+  }
+
+  async function moveOrderToTable(newTableId: string) {
+    if (!selectedTableOrder || !selectedTableId) return
+    const oldTableId = selectedTableId
+    const newTable = localTables.find(t => t.id === newTableId)
+
+    const { error } = await supabase.from('orders').update({ table_id: newTableId }).eq('id', selectedTableOrder.id)
+    if (error) { toast.error(error.message); return }
+    await supabase.from('tables').update({ status: 'empty' }).eq('id', oldTableId)
+    await supabase.from('tables').update({ status: 'occupied' }).eq('id', newTableId)
+
+    setLocalTables(prev => prev.map(t => {
+      if (t.id === oldTableId) return { ...t, status: 'empty' }
+      if (t.id === newTableId) return { ...t, status: 'occupied' }
+      return t
+    }))
+    setOrders(prev => prev.map(o => o.id === selectedTableOrder.id
+      ? { ...o, table_id: newTableId, table: newTable ?? o.table }
+      : o
+    ))
+    setSelectedTableId(newTableId)
+    setTransferAction(null)
+    toast.success(`Sipariş ${newTable?.name ?? 'yeni masaya'} taşındı`)
+  }
+
+  async function mergeTableInto(sourceTableId: string) {
+    if (!selectedTableOrder || !selectedTableId) return
+    const sourceOrder = orders.find(o => o.table_id === sourceTableId && ACTIVE_STATUSES.includes(o.status))
+    if (!sourceOrder) return
+    const targetOrder = selectedTableOrder
+
+    const { error: moveErr } = await supabase
+      .from('order_items')
+      .update({ order_id: targetOrder.id })
+      .eq('order_id', sourceOrder.id)
+    if (moveErr) { toast.error(moveErr.message); return }
+
+    await supabase.from('orders').update({
+      total_amount: targetOrder.total_amount + sourceOrder.total_amount,
+      discount_amount: targetOrder.discount_amount + sourceOrder.discount_amount,
+    }).eq('id', targetOrder.id)
+    await supabase.from('orders').delete().eq('id', sourceOrder.id)
+    await supabase.from('tables').update({ status: 'empty' }).eq('id', sourceTableId)
+
+    const { data: full } = await supabase
+      .from('orders')
+      .select('*, table:tables(id,name), waiter:users(full_name), items:order_items(*, menu_item:menu_items(id,name,price))')
+      .eq('id', targetOrder.id)
+      .single()
+
+    setLocalTables(prev => prev.map(t => t.id === sourceTableId ? { ...t, status: 'empty' } : t))
+    setOrders(prev => {
+      const withoutSource = prev.filter(o => o.id !== sourceOrder.id)
+      return full ? withoutSource.map(o => o.id === targetOrder.id ? (full as unknown as FullOrder) : o) : withoutSource
+    })
+    setTransferAction(null)
+    toast.success('Masalar birleştirildi')
   }
 
   async function markTableClean(tableId: string) {
@@ -1124,6 +1187,35 @@ export function OrdersView({ tenantId, currentUserId, tenantName, tenantAddress,
                       İptal
                     </button>
                   </div>
+                ) : transferAction ? (
+                  <div className="bg-gray-50 border rounded-xl p-3 space-y-2">
+                    <p className="text-xs text-center text-gray-500 uppercase tracking-wide font-medium">
+                      {transferAction === 'move' ? 'Taşınacak Masa Seçin' : 'Birleştirilecek Masa Seçin'}
+                    </p>
+                    <div className="max-h-40 overflow-auto space-y-1.5">
+                      {(transferAction === 'move' ? emptyTargetTables : mergeTargetTables).map(t => (
+                        <button
+                          key={t.id}
+                          onClick={() => transferAction === 'move' ? moveOrderToTable(t.id) : mergeTableInto(t.id)}
+                          className="w-full flex items-center justify-between px-3 py-2 bg-white border rounded-lg text-sm font-medium text-gray-700 hover:border-orange-300 hover:text-orange-700"
+                        >
+                          <span>{t.name}</span>
+                          <span className="text-xs text-gray-400">{t.capacity} kişilik</span>
+                        </button>
+                      ))}
+                      {(transferAction === 'move' ? emptyTargetTables : mergeTargetTables).length === 0 && (
+                        <p className="text-center text-xs text-gray-400 py-3">
+                          {transferAction === 'move' ? 'Boş masa yok' : 'Birleştirilecek siparişli masa yok'}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setTransferAction(null)}
+                      className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-sm"
+                    >
+                      İptal
+                    </button>
+                  </div>
                 ) : (
                   <>
                     <button
@@ -1138,6 +1230,20 @@ export function OrdersView({ tenantId, currentUserId, tenantName, tenantAddress,
                     >
                       <Plus size={16} /> İlave Sipariş Ekle
                     </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setTransferAction('move')}
+                        className="flex-1 flex items-center justify-center gap-1.5 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 py-2 rounded-xl text-sm font-medium"
+                      >
+                        <ArrowRightLeft size={15} /> Masa Değiştir
+                      </button>
+                      <button
+                        onClick={() => setTransferAction('merge')}
+                        className="flex-1 flex items-center justify-center gap-1.5 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 py-2 rounded-xl text-sm font-medium"
+                      >
+                        <Combine size={15} /> Masaları Birleştir
+                      </button>
+                    </div>
                   </>
                 )}
                 <div className="flex gap-2">
