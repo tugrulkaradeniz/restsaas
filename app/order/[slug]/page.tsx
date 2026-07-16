@@ -1,12 +1,14 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { RestaurantOrderPage } from '@/components/order/RestaurantOrderPage'
+import { unstable_noStore as noStore } from 'next/cache'
 
 export const dynamic = 'force-dynamic'
 
 interface Props { params: Promise<{ slug: string }> }
 
 export default async function OrderSlugPage({ params }: Props) {
+  noStore()
   const { slug } = await params
   const service = createServiceClient()
 

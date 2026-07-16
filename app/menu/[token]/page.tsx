@@ -2,6 +2,9 @@ import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/server'
 import { CallWaiterButton } from '@/components/menu/CallWaiterButton'
 import type { MenuCategory, MenuItem, Campaign } from '@/types/database'
+import { unstable_noStore as noStore } from 'next/cache'
+
+export const dynamic = 'force-dynamic'
 
 type FullCategory = MenuCategory & { items: MenuItem[] }
 
@@ -24,6 +27,7 @@ const CAMPAIGN_BG: Record<string, string> = {
 }
 
 export default async function QrMenuPage({ params }: Props) {
+  noStore()
   const service = createServiceClient()
 
   const { data: table } = await service

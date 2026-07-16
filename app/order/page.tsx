@@ -1,9 +1,11 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { MarketplacePage } from '@/components/order/MarketplacePage'
+import { unstable_noStore as noStore } from 'next/cache'
 
 export const dynamic = 'force-dynamic'
 
 export default async function OrderPage() {
+  noStore()
   const service = createServiceClient()
 
   const [{ data: cuisineTypes }, { data: restaurants }] = await Promise.all([
